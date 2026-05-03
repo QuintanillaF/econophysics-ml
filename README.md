@@ -1,7 +1,7 @@
 # econophysics-ml
 Machine learning and econophysics models applied to financial time series
 [README.md](https://github.com/user-attachments/files/27326310/README.md)
-# 📈 Econophysics + ML Trading System
+# Econophysics + ML Trading System
 
 A Python-based quantitative trading framework that combines **econophysics** concepts with **machine learning** to analyze and model financial markets. Developed as part of a physics undergraduate research background.
 
