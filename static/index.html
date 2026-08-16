@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Dashboard — Econofísica</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  /* ── Variables ─────────────────────────────────────────── */
+  :root {
+    --bg:        #080c10;
+    --bg2:       #0d1219;
+    --bg3:       #131a23;
+    --border:    #1e2a38;
+    --text:      #c9d5e0;
+    --text2:     #5a7a99;
+    --blue:      #4d9fff;
+    --green:     #2ecc71;
+    --red:       #e74c3c;
+    --yellow:    #f0b429;
+    --cyan:      #00d4ff;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-disp: 'Syne', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline effect ────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-disp);
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: white;
+  }
+
+  .logo span { color: var(--cyan); }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+    display: inline-block;
+    margin-right: 5px;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  .container { padding: 22px 28px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── Search Bar ─────────────────────────────────────────── */
+  .search-section {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    align-items: center;
+  }
+
+  .search-input {
+    flex: 1;
+    max-width: 360px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-input:focus { border-color: var(--cyan); }
+  .search-input::placeholder { color: var(--text2); }
+
+  select.search-input { cursor: pointer; }
+
+  .btn {
+    background: var(--cyan);
+    color: var(--bg);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: opacity 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+
+  .btn:hover   { opacity: 0.85; }
+  .btn:active  { transform: scale(0.97); }
+  .btn.ghost   {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  /* ── Quick Signals Bar ──────────────────────────────────── */
+  .signals-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .signal-chip {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 130px;
+  }
+
+  .signal-chip:hover { border-color: var(--cyan); background: var(--bg2); }
+
+  .chip-ticker { font-weight: 700; font-size: 12px; color: white; }
+  .chip-price  { font-size: 11px; color: var(--text2); }
+  .chip-signal { font-size: 14px; }
+  .chip-hurst  { font-size: 10px; color: var(--text2); }
+
+  /* ── Grid principal ─────────────────────────────────────── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card:hover::before { opacity: 0.5; }
+
+  .card-title {
+    font-family: var(--font-disp);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .icon { font-size: 14px; }
+
+  /* ── Stats card ─────────────────────────────────────────── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-item {}
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 4px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+  }
+
+  .stat-value.green { color: var(--green); }
+  .stat-value.red   { color: var(--red); }
+  .stat-value.blue  { color: var(--blue); }
+  .stat-value.yellow{ color: var(--yellow); }
+
+  .stat-sub {
+    font-size: 10px;
+    color: var(--text2);
+    margin-top: 3px;
+  }
+
+  /* ── Signal card ─────────────────────────────────────────── */
+  .signal-display {
+    text-align: center;
+    padding: 10px 0;
+  }
+
+  .signal-action {
+    font-family: var(--font-disp);
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 8px;
+  }
+
+  .signal-action.buy    { color: var(--green); }
+  .signal-action.sell   { color: var(--red); }
+  .signal-action.hold   { color: var(--text2); }
+  .signal-action.wait   { color: var(--yellow); }
+
+  .signal-prob {
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 6px;
+  }
+
+  .confidence-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+
+  .confidence-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s ease;
+    background: var(--green);
+  }
+
+  /* ── Hurst card ─────────────────────────────────────────── */
+  .hurst-gauge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+  }
+
+  .hurst-value {
+    font-family: var(--font-disp);
+    font-size: 48px;
+    font-weight: 800;
+    color: white;
+    line-height: 1;
+  }
+
+  .hurst-bar-track {
+    width: 100%;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .hurst-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
+    width: 100%;
+  }
+
+  .hurst-marker {
+    position: absolute;
+    top: -5px;
+    width: 4px;
+    height: 16px;
+    background: white;
+    border-radius: 2px;
+    transform: translateX(-50%);
+    transition: left 0.8s ease;
+    box-shadow: 0 0 8px white;
+  }
+
+  .hurst-labels {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text2);
+  }
+
+  .hurst-señal {
+    font-family: var(--font-disp);
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .hurst-desc { font-size: 11px; color: var(--text2); text-align: center; }
+
+  /* ── Chart card ─────────────────────────────────────────── */
+  .chart-card {
+    grid-column: span 3;
+  }
+
+  .chart-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab.active, .tab:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  .chart-container { height: 280px; position: relative; }
+
+  /* ── Portfolio section ──────────────────────────────────── */
+  .portfolio-section { margin-top: 16px; }
+
+  .section-title {
+    font-family: var(--font-disp);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .portfolio-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* ── Portfolio inputs ────────────────────────────────────── */
+  .ticker-input-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .ticker-tag {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ticker-tag button {
+    background: none;
+    border: none;
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .ticker-tag button:hover { color: var(--red); }
+
+  /* ── Weights display ─────────────────────────────────────── */
+  .weight-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .weight-ticker {
+    width: 80px;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+  }
+
+  .weight-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .weight-bar-fill {
+    height: 100%;
+    background: var(--cyan);
+    border-radius: 3px;
+    transition: width 0.8s ease;
+  }
+
+  .weight-pct {
+    width: 45px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--cyan);
+  }
+
+  /* ── Correlation matrix ──────────────────────────────────── */
+  .corr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .corr-table th, .corr-table td {
+    padding: 6px 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+
+  .corr-table th { color: var(--text2); font-weight: 500; }
+
+  /* ── Trades table ────────────────────────────────────────── */
+  .trades-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .trades-table th {
+    text-align: left;
+    padding: 8px 10px;
+    color: var(--text2);
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+  }
+
+  .trades-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .trades-table tr:last-child td { border-bottom: none; }
+  .trades-table tr:hover td { background: var(--bg3); }
+
+  .badge {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .badge.buy  { background: rgba(46,204,113,0.15); color: var(--green); }
+  .badge.sell { background: rgba(231,76,60,0.15);  color: var(--red); }
+  .badge.hold { background: rgba(90,122,153,0.15); color: var(--text2); }
+
+  /* ── Regimen badge ───────────────────────────────────────── */
+  .regimen-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+
+  .regimen-badge.calma  {
+    background: rgba(46,204,113,0.1);
+    border: 1px solid rgba(46,204,113,0.3);
+    color: var(--green);
+  }
+
+  .regimen-badge.estres {
+    background: rgba(231,76,60,0.1);
+    border: 1px solid rgba(231,76,60,0.3);
+    color: var(--red);
+  }
+
+  /* ── Loading ─────────────────────────────────────────────── */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    color: var(--text2);
+    font-size: 12px;
+    gap: 10px;
+  }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error ───────────────────────────────────────────────── */
+  .error-msg {
+    padding: 12px;
+    background: rgba(231,76,60,0.1);
+    border: 1px solid rgba(231,76,60,0.3);
+    border-radius: 6px;
+    color: var(--red);
+    font-size: 12px;
+  }
+
+  /* ── Responsive ──────────────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .main-grid { grid-template-columns: 1fr 1fr; }
+    .chart-card { grid-column: span 2; }
+    .portfolio-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 700px) {
+    .main-grid { grid-template-columns: 1fr; }
+    .chart-card { grid-column: span 1; }
+    .container { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ────────────────────────────────────────────── -->
+<header>
+  <div class="logo">QUANT<span>EDGE</span></div>
+  <div class="header-status">
+    <span><span class="dot"></span>SERVIDOR ACTIVO</span>
+    <span id="last-update">—</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── BARRA DE BÚSQUEDA ─────────────────────────────── -->
+  <div class="search-section">
+    <input class="search-input" type="text" id="ticker-input"
+           placeholder="Ticker: AAPL, BTC-USD, NVDA..."
+           onkeydown="if(event.key==='Enter') analizarTicker()">
+    <select class="search-input" id="periodo-select" style="max-width:120px">
+      <option value="3mo">3 meses</option>
+      <option value="6mo">6 meses</option>
+      <option value="1y" selected>1 año</option>
+      <option value="2y">2 años</option>
+      <option value="5y">5 años</option>
+    </select>
+    <button class="btn" onclick="analizarTicker()">ANALIZAR</button>
+    <button class="btn ghost" onclick="entrenarModelo()">ENTRENAR ML</button>
+  </div>
+
+  <!-- ── SEÑALES RÁPIDAS ───────────────────────────────── -->
+  <div class="signals-bar" id="signals-bar">
+    <div class="loading"><div class="spinner"></div> Cargando señales...</div>
+  </div>
+
+  <!-- ── GRID PRINCIPAL ───────────────────────────────── -->
+  <div class="main-grid" id="main-grid">
+
+    <!-- Stats -->
+    <div class="card" id="card-stats">
+      <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS</div>
+      <div class="loading"><div class="spinner"></div> Seleccioná un ticker</div>
+    </div>
+
+    <!-- Señal ML -->
+    <div class="card" id="card-señal">
+      <div class="card-title"><span class="icon">🤖</span>SEÑAL ML</div>
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Hurst -->
+    <div class="card" id="card-hurst">
+      <div class="card-title"><span class="icon">🌊</span>EXPONENTE DE HURST</div>
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Gráfico -->
+    <div class="card chart-card" id="card-chart">
+      <div class="card-title"><span class="icon">📈</span>GRÁFICO</div>
+      <div class="chart-tabs">
+        <button class="tab active" onclick="cambiarChart('precio',this)">Precio</button>
+        <button class="tab" onclick="cambiarChart('vol',this)">Volatilidad</button>
+        <button class="tab" onclick="cambiarChart('hurst',this)">Hurst Rolling</button>
+      </div>
+      <div class="chart-container">
+        <canvas id="main-chart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── PORTFOLIO ─────────────────────────────────────── -->
+  <div class="portfolio-section">
+    <div class="section-title">
+      <span>⚖️</span> OPTIMIZACIÓN DE PORTFOLIO
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <input class="search-input" type="text" id="port-ticker-input"
+             placeholder="Agregar ticker..."
+             style="max-width:180px"
+             onkeydown="if(event.key==='Enter') agregarTickerPortfolio()">
+      <button class="btn ghost" onclick="agregarTickerPortfolio()">+ AGREGAR</button>
+      <button class="btn" onclick="optimizarPortfolio()">OPTIMIZAR</button>
+    </div>
+
+    <div class="ticker-input-row" id="portfolio-tickers"></div>
+
+    <div class="portfolio-grid">
+      <div class="card" id="card-pesos">
+        <div class="card-title"><span class="icon">📐</span>PESOS ÓPTIMOS</div>
+        <div id="pesos-content" style="color:var(--text2);font-size:12px">
+          Agregá activos y presioná OPTIMIZAR
+        </div>
+      </div>
+      <div class="card" id="card-corr">
+        <div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
+        <div id="corr-content" style="color:var(--text2);font-size:12px">
+          —
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TRADES LOG ─────────────────────────────────────── -->
+  <div class="portfolio-section" style="margin-top:24px">
+    <div class="section-title" style="justify-content:space-between">
+      <span><span>📋</span> HISTORIAL DE SEÑALES</span>
+      <button class="btn ghost" style="padding:4px 10px;font-size:10px"
+              onclick="cargarTrades()">REFRESCAR</button>
+    </div>
+    <div class="card">
+      <div id="trades-content">
+        <div class="loading"><div class="spinner"></div> Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── JAVASCRIPT ─────────────────────────────────────────── -->
+<script>
+const API = 'http://localhost:8000/api'
+let chartInstance = null
+let chartData     = null
+let chartMode     = 'precio'
+let portfolioTickers = ['AAPL', 'NVDA', 'BTC-USD', 'ETH-USD']
+
+// ── Utilidades ──────────────────────────────────────────────
+const $ = id => document.getElementById(id)
+
+function colorClass(val, thresholds) {
+  if (val >= thresholds[1]) return 'green'
+  if (val <= thresholds[0]) return 'red'
+  return ''
+}
+
+function formatPct(v) {
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}%`
+}
+
+// ── Señales rápidas ─────────────────────────────────────────
+async function cargarSenales() {
+  const tickers = 'AAPL,NVDA,TSLA,SPY,BTC-USD,ETH-USD,SOL-USD'
+  try {
+    const r   = await fetch(`${API}/señales?tickers=${tickers}`)
+    const data = await r.json()
+    const bar  = $('signals-bar')
+    bar.innerHTML = ''
+
+    for (const s of data.señales) {
+      const div = document.createElement('div')
+      div.className = 'signal-chip'
+      div.onclick   = () => {
+        $('ticker-input').value = s.ticker
+        analizarTicker()
+      }
+      const señalColor = s.señal === '↑' ? 'var(--green)' :
+                         s.señal === '↓' ? 'var(--red)' : 'var(--text2)'
+      const retColor   = s.ret_1m >= 0 ? 'var(--green)' : 'var(--red)'
+
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="chip-ticker">${s.ticker}</span>
+          <span class="chip-signal" style="color:${señalColor}">${s.señal}</span>
+        </div>
+        <span class="chip-price">$${s.precio.toLocaleString()}</span>
+        <span style="font-size:10px;color:${retColor}">${formatPct(s.ret_1m)} (1m)</span>
+        <span class="chip-hurst">H=${s.hurst} │ ${s.regimen}</span>
+      `
+      bar.appendChild(div)
+    }
+
+    $('last-update').textContent =
+      `Actualizado ${new Date().toLocaleTimeString()}`
+
+  } catch (e) {
+    $('signals-bar').innerHTML =
+      '<div style="color:var(--text2);font-size:11px;padding:8px">⚠️ Servidor no disponible — corré python server.py</div>'
+  }
+}
+
+// ── Analizar ticker ─────────────────────────────────────────
+async function analizarTicker() {
+  const ticker  = $('ticker-input').value.trim().toUpperCase()
+  const periodo = $('periodo-select').value
+  if (!ticker) return
+
+  // Loading state
+  $('card-stats').innerHTML = `
+    <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS — ${ticker}</div>
+    <div class="loading"><div class="spinner"></div> Analizando...</div>`
+  $('card-señal').innerHTML = `
+    <div class="card-title"><span class="icon">🤖</span>SEÑAL ML</div>
+    <div class="loading"><div class="spinner"></div></div>`
+  $('card-hurst').innerHTML = `
+    <div class="card-title"><span class="icon">🌊</span>EXPONENTE DE HURST</div>
+    <div class="loading"><div class="spinner"></div></div>`
+
+  try {
+    const r    = await fetch(`${API}/analizar`, {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ticker, periodo})
+    })
+
+    if (!r.ok) {
+      const err = await r.json()
+      throw new Error(err.detail || 'Error del servidor')
+    }
+
+    const d = await r.json()
+    chartData = d.series
+    renderStats(d)
+    renderSeñal(d)
+    renderHurst(d)
+    renderChart(chartMode, d.series, ticker)
+
+  } catch (e) {
+    const msg = `<div class="error-msg">⚠️ ${e.message}</div>`
+    $('card-stats').innerHTML  = `<div class="card-title">📊 ERROR</div>${msg}`
+    $('card-señal').innerHTML  = `<div class="card-title">🤖 ERROR</div>${msg}`
+    $('card-hurst').innerHTML  = `<div class="card-title">🌊 ERROR</div>`
+  }
+}
+
+// ── Render Stats ────────────────────────────────────────────
+function renderStats(d) {
+  const s = d.stats
+  const reg = d.regimen
+
+  const retClass = colorClass(s.retorno_anual, [0, 0])
+  const ddClass  = 'red'
+  const shClass  = colorClass(s.sharpe, [0.5, 1])
+
+  $('card-stats').innerHTML = `
+    <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS — ${d.ticker}</div>
+    <div class="stat-grid">
+      <div class="stat-item">
+        <div class="stat-label">Retorno Anual</div>
+        <div class="stat-value ${retClass}">${formatPct(s.retorno_anual)}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Volatilidad</div>
+        <div class="stat-value yellow">${s.vol_anual.toFixed(1)}%</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Sharpe Ratio</div>
+        <div class="stat-value ${shClass}">${s.sharpe.toFixed(2)}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Max Drawdown</div>
+        <div class="stat-value red">${s.max_drawdown.toFixed(1)}%</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">VaR 95% diario</div>
+        <div class="stat-value">${s.var_95_diario.toFixed(2)}%</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Período</div>
+        <div class="stat-value" style="font-size:13px">${s.n_dias} días</div>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <span class="regimen-badge ${reg.estado === 'CALMA' ? 'calma' : 'estres'}">
+        ${reg.estado === 'CALMA' ? '✅' : '⚠️'} ${reg.estado}
+        &nbsp;│&nbsp; Vol ${reg.vol_actual.toFixed(1)}%
+        (umbral ${reg.vol_mediana.toFixed(1)}%)
+      </span>
+    </div>`
+}
+
+// ── Render Señal ML ─────────────────────────────────────────
+function renderSeñal(d) {
+  const ml = d.señal_ml
+  if (!ml || ml.accion === 'CALCULANDO') {
+    $('card-señal').innerHTML = `
+      <div class="card-title"><span class="icon">🤖</span>SEÑAL ML</div>
+      <div style="color:var(--yellow);text-align:center;padding:20px">
+        Modelo no entrenado.<br>
+        <button class="btn" style="margin-top:12px"
+          onclick="entrenarModelo()">ENTRENAR AHORA</button>
+      </div>`
+    return
+  }
+
+  const acClass = ml.accion === 'COMPRAR' ? 'buy' :
+                  ml.accion === 'VENDER'  ? 'sell' : 'hold'
+  const prob_pct = (ml.prob * 100).toFixed(0)
+  const barColor = ml.accion === 'COMPRAR' ? 'var(--green)' :
+                   ml.accion === 'VENDER'  ? 'var(--red)'   : 'var(--text2)'
+
+  $('card-señal').innerHTML = `
+    <div class="card-title"><span class="icon">🤖</span>SEÑAL ML — ${d.ticker}</div>
+    <div class="signal-display">
+      <div class="signal-action ${acClass}">${ml.accion}</div>
+      <div class="signal-prob">Confianza: <strong>${ml.confianza}</strong> (${prob_pct}%)</div>
+      <div class="confidence-bar">
+        <div class="confidence-fill"
+             style="width:${prob_pct}%;background:${barColor}"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-top:8px">
+        Umbral mínimo: 55% │ Random Forest 200 árboles
+      </div>
+    </div>`
+}
+
+// ── Render Hurst ────────────────────────────────────────────
+function renderHurst(d) {
+  const H    = d.hurst.valor
+  const pct  = (H * 100).toFixed(0)
+  const col  = d.hurst.color === 'green' ? 'var(--green)' :
+               d.hurst.color === 'orange'? 'var(--yellow)' : 'var(--text2)'
+
+  $('card-hurst').innerHTML = `
+    <div class="card-title"><span class="icon">🌊</span>EXPONENTE DE HURST</div>
+    <div class="hurst-gauge">
+      <div class="hurst-value" style="color:${col}">${H.toFixed(3)}</div>
+      <div style="width:100%">
+        <div class="hurst-bar-track">
+          <div class="hurst-bar-fill"></div>
+          <div class="hurst-marker" style="left:${pct}%"></div>
+        </div>
+        <div class="hurst-labels">
+          <span>0 Anti-persist.</span>
+          <span>0.5 Aleatorio</span>
+          <span>1.0 Persistente</span>
+        </div>
+      </div>
+      <div class="hurst-señal" style="color:${col}">${d.hurst.señal}</div>
+      <div class="hurst-desc">${d.hurst.desc}</div>
+    </div>`
+}
+
+// ── Chart ────────────────────────────────────────────────────
+function renderChart(modo, series, ticker) {
+  if (!series) return
+  const ctx = $('main-chart').getContext('2d')
+  if (chartInstance) chartInstance.destroy()
+
+  let labels, data, label, color, fill
+
+  if (modo === 'precio') {
+    labels = series.fechas
+    data   = series.precios
+    label  = `${ticker} — Precio`
+    color  = '#4d9fff'
+    fill   = false
+  } else if (modo === 'vol') {
+    labels = series.fechas
+    data   = series.vol
+    label  = 'Volatilidad Anualizada %'
+    color  = '#f0b429'
+    fill   = true
+  } else {
+    labels = series.fechas
+    data   = series.hurst
+    label  = 'Hurst Rolling (63d)'
+    color  = '#2ecc71'
+    fill   = false
+  }
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        borderColor:     color,
+        backgroundColor: fill ? color + '18' : 'transparent',
+        borderWidth:     1.5,
+        pointRadius:     0,
+        tension:         0.2,
+        fill,
+      }]
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           { duration: 400 },
+      plugins: {
+        legend: { labels: { color: '#5a7a99', font: { family: 'JetBrains Mono', size: 11 } } },
+        tooltip: {
+          backgroundColor: '#0d1219',
+          borderColor: '#1e2a38',
+          borderWidth: 1,
+          titleColor: '#c9d5e0',
+          bodyColor: '#5a7a99',
+          titleFont: { family: 'JetBrains Mono' },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#5a7a99', maxTicksLimit: 8,
+                   font: { family: 'JetBrains Mono', size: 10 } },
+          grid:  { color: '#1e2a38' }
+        },
+        y: {
+          ticks: { color: '#5a7a99',
+                   font: { family: 'JetBrains Mono', size: 10 } },
+          grid:  { color: '#1e2a38' }
+        }
+      }
+    }
+  })
+
+  // Línea H=0.5 en modo hurst
+  if (modo === 'hurst') {
+    chartInstance.data.datasets.push({
+      label: 'H = 0.5 (aleatorio)',
+      data:  new Array(labels.length).fill(0.5),
+      borderColor: '#e74c3c55',
+      borderWidth: 1,
+      borderDash: [4,4],
+      pointRadius: 0,
+    })
+    chartInstance.update()
+  }
+}
+
+function cambiarChart(modo, btn) {
+  chartMode = modo
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+  btn.classList.add('active')
+  const ticker = $('ticker-input').value.trim().toUpperCase()
+  if (chartData) renderChart(modo, chartData, ticker)
+}
+
+// ── Entrenar modelo ─────────────────────────────────────────
+async function entrenarModelo() {
+  const ticker = $('ticker-input').value.trim().toUpperCase()
+  if (!ticker) { alert('Ingresá un ticker primero'); return }
+
+  const btn = event.target
+  btn.textContent = 'ENTRENANDO...'
+  btn.disabled    = true
+
+  try {
+    const r = await fetch(`${API}/entrenar/${ticker}`)
+    if (!r.ok) throw new Error("Error del servidor")
+    const d = await r.json()
+    const msg= d.mensaje || d.status || "Modelo de ${ticker} entrenando en background"
+    alert(`✓ ${msg}`)
+    setTimeout(() => analizarTicker(), 8000)
+  } catch (e) {
+    alert('Error entrenando modelo')
+  } finally {
+    btn.textContent = 'ENTRENAR ML'
+    btn.disabled    = false
+  }
+}
+
+// ── Portfolio ────────────────────────────────────────────────
+function renderPortfolioTickers() {
+  const row = $('portfolio-tickers')
+  row.innerHTML = ''
+  portfolioTickers.forEach(t => {
+    const tag = document.createElement('div')
+    tag.className = 'ticker-tag'
+    tag.innerHTML = `<span>${t}</span><button onclick="removerTicker('${t}')">×</button>`
+    row.appendChild(tag)
+  })
+}
+
+function agregarTickerPortfolio() {
+  const val = $('port-ticker-input').value.trim().toUpperCase()
+  if (val && !portfolioTickers.includes(val)) {
+    portfolioTickers.push(val)
+    renderPortfolioTickers()
+    $('port-ticker-input').value = ''
+  }
+}
+
+function removerTicker(t) {
+  portfolioTickers = portfolioTickers.filter(x => x !== t)
+  renderPortfolioTickers()
+}
+
+async function optimizarPortfolio() {
+  if (portfolioTickers.length < 2) {
+    alert('Necesitás al menos 2 activos'); return
+  }
+
+  $('card-pesos').innerHTML = `
+    <div class="card-title"><span class="icon">📐</span>OPTIMIZANDO...</div>
+    <div class="loading"><div class="spinner"></div> Calculando pesos óptimos...</div>`
+  $('card-corr').innerHTML = `
+    <div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
+    <div class="loading"><div class="spinner"></div></div>`
+
+  try {
+    const r = await fetch(`${API}/portfolio`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        tickers: portfolioTickers,
+        periodo: $('periodo-select').value
+      })
+    })
+    const d = await r.json()
+    renderPesos(d)
+    renderCorrelaciones(d)
+  } catch (e) {
+    $('card-pesos').innerHTML = `
+      <div class="card-title">📐 ERROR</div>
+      <div class="error-msg">⚠️ ${e.message}</div>`
+  }
+}
+
+function renderPesos(d) {
+  const m = d.metricas
+  let html = `<div class="card-title"><span class="icon">📐</span>PESOS ÓPTIMOS</div>`
+
+  for (const [ticker, peso] of Object.entries(d.pesos)) {
+    const pct = (peso * 100).toFixed(1)
+    html += `
+      <div class="weight-row">
+        <div class="weight-ticker">${ticker}</div>
+        <div class="weight-bar-track">
+          <div class="weight-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="weight-pct">${pct}%</div>
+      </div>`
+  }
+
+  html += `
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+        <div><span style="color:var(--text2)">Retorno est.</span><br>
+          <strong style="color:var(--green)">${formatPct(m.retorno_anual_est)}</strong></div>
+        <div><span style="color:var(--text2)">Volatilidad</span><br>
+          <strong style="color:var(--yellow)">${m.volatilidad_anual.toFixed(1)}%</strong></div>
+        <div><span style="color:var(--text2)">Sharpe</span><br>
+          <strong style="color:var(--blue)">${m.sharpe_ratio.toFixed(2)}</strong></div>
+        <div><span style="color:var(--text2)">Entropía</span><br>
+          <strong>${m.entropia.toFixed(3)} / ${m.entropia_maxima.toFixed(3)}</strong></div>
+      </div>
+    </div>`
+
+  $('card-pesos').innerHTML = html
+}
+
+function renderCorrelaciones(d) {
+  const c = d.correlacion
+  let html = `<div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
+    <table class="corr-table">
+      <tr><th></th>`
+
+  c.tickers.forEach(t => { html += `<th>${t}</th>` })
+  html += '</tr>'
+
+  c.matrix.forEach((row, i) => {
+    html += `<tr><th>${c.tickers[i]}</th>`
+    row.forEach(val => {
+      const abs = Math.abs(val)
+      const r = val >= 0 ? Math.round(abs * 200) : 0
+      const g = val <  0 ? Math.round(abs * 180) : 0
+      const bg = val === 1 ? '#1e2a38' :
+                 `rgba(${r},${g},60,${Math.min(abs * 0.6, 0.5)})`
+      html += `<td style="background:${bg};color:${abs > 0.7 ? 'white':'var(--text)'}">${val.toFixed(2)}</td>`
+    })
+    html += '</tr>'
+  })
+
+  html += '</table>'
+  $('card-corr').innerHTML = html
+}
+
+// ── Trades ───────────────────────────────────────────────────
+async function cargarTrades() {
+  try {
+    const r = await fetch(`${API}/trades`)
+    const d = await r.json()
+
+    if (!d.trades.length) {
+      $('trades-content').innerHTML =
+        '<div style="color:var(--text2);font-size:12px;padding:12px">Sin trades registrados todavía.</div>'
+      return
+    }
+
+    let html = `<table class="trades-table">
+      <tr>
+        <th>Timestamp</th><th>Ticker</th><th>Acción</th>
+        <th>Precio</th><th>Monto</th><th>Prob. ML</th><th>Broker</th>
+      </tr>`
+
+    d.trades.slice().reverse().forEach(t => {
+      const cls = t.accion === 'BUY'  ? 'buy' :
+                  t.accion === 'SELL' ? 'sell' : 'hold'
+      html += `<tr>
+        <td>${new Date(t.timestamp).toLocaleString()}</td>
+        <td><strong>${t.ticker}</strong></td>
+        <td><span class="badge ${cls}">${t.accion}</span></td>
+        <td>$${t.precio?.toFixed(2) || '—'}</td>
+        <td>$${t.monto?.toFixed(2) || '—'}</td>
+        <td>${(t.prob_modelo * 100).toFixed(0)}%</td>
+        <td style="color:var(--text2)">${t.broker}</td>
+      </tr>`
+    })
+
+    html += '</table>'
+    $('trades-content').innerHTML = html
+
+  } catch (e) {
+    $('trades-content').innerHTML =
+      '<div style="color:var(--text2);font-size:12px;padding:12px">Sin conexión al servidor.</div>'
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────
+window.onload = async () => {
+  renderPortfolioTickers()
+  await cargarSenales()
+  await cargarTrades()
+
+  // Analizar AAPL por defecto
+  $('ticker-input').value = 'AAPL'
+  await analizarTicker()
+
+  // Refrescar señales cada 5 minutos
+  setInterval(cargarSenales, 5 * 60 * 1000)
+}
+</script>
+</body>
+</html>
