@@ -21,14 +21,7 @@ Econophysics applies concepts from statistical physics to model financial system
 
 ---
 
-##Project Structure
 
-```
-econophysics-ml/
-│
-├── bot_trading_ml_econofisica.py       # Short-term ML trading bot
-└── econofisica_mediano_largo_plazo.py  # Medium/long-term econophysics analysis
-```
 
 ---
 
