@@ -560,6 +560,55 @@
     color: var(--red);
   }
 
+  /* ── Value at Risk ──────────────────────────────────────── */
+  .var-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 6px;
+  }
+  .var-table th, .var-table td {
+    padding: 6px 8px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  .var-table th:first-child, .var-table td:first-child { text-align: left; }
+  .var-table th {
+    color: var(--text2);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+  }
+  .var-table tr:hover td { background: var(--bg3); }
+
+  .zona-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .zona-badge.green  { background: rgba(46,204,113,0.14); color: var(--green);  border: 1px solid rgba(46,204,113,0.3); }
+  .zona-badge.yellow { background: rgba(240,180,41,0.14); color: var(--yellow); border: 1px solid rgba(240,180,41,0.3); }
+  .zona-badge.red    { background: rgba(231,76,60,0.14);  color: var(--red);    border: 1px solid rgba(231,76,60,0.3); }
+
+  .var-bt-row {
+    display: grid;
+    grid-template-columns: 1.4fr 0.8fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .var-bt-row .modelo { font-weight: 600; }
+  .var-verdict.ok   { color: var(--green); }
+  .var-verdict.fail { color: var(--red); }
+
   /* ── Loading ─────────────────────────────────────────────── */
   .loading {
     display: flex;
@@ -703,6 +752,26 @@
         <div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
         <div id="corr-content" style="color:var(--text2);font-size:12px">
           —
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VALUE AT RISK ─────────────────────────────────── -->
+  <div class="portfolio-section" style="margin-top:24px">
+    <div class="section-title" style="justify-content:space-between">
+      <span><span>🛡️</span> RIESGO — VALUE AT RISK &amp; BACKTESTING REGULATORIO</span>
+      <button class="btn" style="padding:4px 12px;font-size:10px"
+              onclick="analizarVaR()">CALCULAR VaR / BACKTEST</button>
+    </div>
+    <div class="card">
+      <div id="var-content">
+        <div style="color:var(--text2);font-size:12px;padding:12px">
+          Usa el ticker y el período de la barra de búsqueda (recomendado: 2y o 5y).
+          Corre los tres métodos de VaR, el Expected Shortfall y un backtest
+          walk-forward con los tests de Kupiec, Christoffersen y el semáforo de Basilea.
+          El método Student-t ajusta ν en cada ventana, así que puede tardar
+          ~30&nbsp;s la primera vez.
         </div>
       </div>
     </div>
@@ -1173,6 +1242,106 @@ function renderCorrelaciones(d) {
 
   html += '</table>'
   $('card-corr').innerHTML = html
+}
+
+// ── Value at Risk ───────────────────────────────────────────
+async function analizarVaR() {
+  const ticker  = $('ticker-input').value.trim().toUpperCase()
+  const periodo = $('periodo-select').value
+  if (!ticker) return
+
+  $('var-content').innerHTML =
+    `<div class="loading"><div class="spinner"></div> Calculando VaR y backtest walk-forward para ${ticker}...</div>`
+
+  try {
+    const r = await fetch(`${API}/var`, {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ ticker, periodo })
+    })
+    if (!r.ok) {
+      const err = await r.json()
+      throw new Error(err.detail || 'Error del servidor')
+    }
+    renderVaR(await r.json())
+  } catch (e) {
+    $('var-content').innerHTML = `<div class="error-msg">⚠️ ${e.message}</div>`
+  }
+}
+
+function renderVaR(d) {
+  const rs = d.resumen
+
+  let metodos = `
+    <table class="var-table">
+      <tr><th>Método</th><th>VaR ${(d.confianza * 100).toFixed(0)}%</th><th>Expected Shortfall</th><th>VaR ($)</th></tr>`
+  for (const m of d.metodos) {
+    metodos += `<tr>
+      <td>${m.metodo}</td>
+      <td>${m.var_pct.toFixed(3)}%</td>
+      <td>${m.es_pct.toFixed(3)}%</td>
+      <td>$${m.var_monto.toLocaleString('es-AR', {maximumFractionDigits: 0})}</td>
+    </tr>`
+  }
+  metodos += '</table>'
+
+  let backtests = `
+    <div class="var-bt-row" style="color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+      <div>Modelo</div><div>Excepciones</div><div>Kupiec / Christoffersen</div><div>Zona Basilea</div>
+    </div>`
+  for (const bt of d.backtests) {
+    const kOk = !bt.kupiec.rechaza
+    const cOk = !bt.christoffersen.rechaza
+    const zona = bt.basel.zona.toLowerCase()
+    const zonaEmoji = zona === 'green' ? '🟢' : zona === 'yellow' ? '🟡' : '🔴'
+    backtests += `
+      <div class="var-bt-row">
+        <div class="modelo">${bt.modelo}</div>
+        <div>${bt.n_excepciones} / ${bt.n_dias}
+          <span style="color:var(--text2)">(${bt.tasa_obs_pct.toFixed(2)}% vs ${bt.tasa_esp_pct.toFixed(2)}%)</span></div>
+        <div>
+          <span class="var-verdict ${kOk ? 'ok' : 'fail'}">${kOk ? 'pasa' : 'RECHAZA'}</span>
+          <span style="color:var(--text2)">p=${bt.kupiec.p_value.toFixed(3)}</span> /
+          <span class="var-verdict ${cOk ? 'ok' : 'fail'}">${cOk ? 'pasa' : 'RECHAZA'}</span>
+        </div>
+        <div>
+          <span class="zona-badge ${zona}">${zonaEmoji} ${bt.basel.zona}</span>
+          <span style="color:var(--text2)">×${bt.basel.multiplicador_capital.toFixed(2)}</span>
+        </div>
+      </div>`
+  }
+
+  const peorZona = rs.peor_zona_basel.toLowerCase()
+  const alerta = peorZona === 'green'
+    ? `Todos los modelos probados quedan en zona verde.`
+    : `El modelo <strong>${rs.peor_modelo}</strong> cae en zona
+       <span class="zona-badge ${peorZona}">${rs.peor_zona_basel}</span>:
+       el multiplicador de capital regulatorio sube a <strong>${rs.peor_multiplicador.toFixed(2)}</strong>
+       (base 3.00).`
+
+  $('var-content').innerHTML = `
+    <div class="card-title"><span class="icon">🛡️</span>VALUE AT RISK — ${d.ticker}
+      <span style="color:var(--text2);font-weight:400;font-size:11px">
+        &nbsp;│&nbsp; ${d.n_observaciones} días &nbsp;│&nbsp; ventana ${d.ventana} &nbsp;│&nbsp; cartera $${d.valor_portfolio.toLocaleString('es-AR')}
+      </span>
+    </div>
+
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px">
+      Dispersión entre el estimador más y menos conservador:
+      <strong style="color:var(--text)">${rs.spread_metodos_pct.toFixed(1)}%</strong>
+      &nbsp;│&nbsp; Expected Shortfall 97.5% (FRTB): <strong style="color:var(--text)">${d.es_975_pct.toFixed(3)}%</strong>
+    </div>
+    ${metodos}
+
+    <div style="margin-top:18px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px">
+      Backtest walk-forward · tests supervisores
+    </div>
+    ${backtests}
+
+    <div style="margin-top:14px;padding:10px 12px;border-radius:4px;background:var(--bg3);
+                border:1px solid var(--border);font-size:11px;line-height:1.6">
+      ${alerta}
+    </div>`
 }
 
 // ── Trades ───────────────────────────────────────────────────

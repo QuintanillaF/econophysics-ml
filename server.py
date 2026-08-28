@@ -41,6 +41,14 @@ class PortafolioRequest(BaseModel):
     tickers: list[str]
     periodo: str = "1y"
 
+class VaRRequest(BaseModel):
+    ticker: str
+    periodo: str = "5y"          # el backtest walk-forward necesita historia larga
+    confianza: float = 0.99
+    ventana: int = 250           # ventana rodante estándar de Basilea
+    valor: float = 1_000_000.0
+    incluir_t: bool = True       # el backtest Student-t es lento (ajusta ν en cada ventana)
+
 # ── Cache ─────────────────────────────────────────────────────
 _cache: dict = {}
 CACHE_MIN = 15
@@ -311,6 +319,129 @@ async def analizar_portfolio(req: PortafolioRequest):
                     'entropia_maxima':round(float(np.log(n)),3)},
         'correlacion':{'tickers':list(corr.columns),'matrix':[[round(float(v),3) for v in row] for row in corr.values]}
     }
+
+
+@app.post("/api/var")
+def analizar_var(req: VaRRequest):
+    """Value at Risk + backtesting regulatorio para un activo.
+
+    Corre los tres estimadores de VaR (histórico, paramétrico normal/Student-t,
+    Monte Carlo), el Expected Shortfall, y un backtest walk-forward con los tests
+    supervisores (Kupiec, Christoffersen, cobertura condicional) + semáforo de Basilea.
+
+    Endpoint síncrono (`def`, no `async`): FastAPI lo corre en un threadpool para no
+    bloquear el event loop, porque el ajuste de la t en cada ventana es lento.
+    El resultado se cachea 15 min.
+    """
+    from varengine import (
+        Portfolio, compare_methods, expected_shortfall, run_full_backtest,
+    )
+
+    ticker = req.ticker.upper().strip()
+    key = f"var_{ticker}_{req.periodo}_{req.confianza}_{req.ventana}_{req.incluir_t}"
+    if cache_ok(key):
+        return _cache[key]
+
+    dl = get_data_layer()
+    df = dl.get_ohlcv(ticker, 'largo', req.periodo)
+    if df.empty:
+        raise HTTPException(404, f"Sin datos para {ticker}")
+
+    precios = df[['close']].copy()
+    precios.columns = [ticker]
+    precios = precios[precios[ticker] > 0].dropna()
+
+    try:
+        book = Portfolio(precios, value=req.valor)
+    except ValueError as e:
+        raise HTTPException(400, f"No se pudo construir la cartera: {e}")
+
+    retornos = book.returns
+    if len(retornos) <= req.ventana:
+        raise HTTPException(
+            400,
+            f"Historia insuficiente: {len(retornos)} días de retornos disponibles, "
+            f"se necesitan más de {req.ventana} para el backtest walk-forward. "
+            f"Probá un período más largo.",
+        )
+
+    # ── 1. Comparación de los cinco estimadores ───────────────────────────
+    comp = compare_methods(book.asset_returns, book.w, req.confianza,
+                           portfolio_value=req.valor)
+    metodos = [
+        {
+            'metodo':    idx,
+            'var_pct':   round(float(row['VaR']) * 100, 3),
+            'es_pct':    round(float(row['ES']) * 100, 3),
+            'var_monto': round(float(row['VaR_amount']), 2),
+            'es_monto':  round(float(row['ES_amount']), 2),
+            'nota':      row['note'],
+        }
+        for idx, row in comp.iterrows()
+    ]
+
+    # ── 2. Backtest walk-forward + tests supervisores ────────────────────
+    def _backtest(metodo: str, dist: str, etiqueta: str) -> dict:
+        out = run_full_backtest(retornos, window=req.ventana, confidence=req.confianza,
+                                method=metodo, distribution=dist)
+        k, c, cc, b = (out['kupiec'], out['christoffersen'],
+                       out['conditional_coverage'], out['basel'])
+        return {
+            'modelo':         etiqueta,
+            'n_dias':         out['n_days'],
+            'n_excepciones':  out['n_exceptions'],
+            'tasa_obs_pct':   round(out['exception_rate'] * 100, 3),
+            'tasa_esp_pct':   round(out['expected_rate'] * 100, 3),
+            'kupiec': {
+                'lr': round(k.statistic, 3), 'p_value': round(k.p_value, 4),
+                'rechaza': bool(k.reject), 'detalle': k.detail,
+            },
+            'christoffersen': {
+                'lr': round(c.statistic, 3), 'p_value': round(c.p_value, 4),
+                'rechaza': bool(c.reject), 'detalle': c.detail,
+            },
+            'cobertura_condicional': {
+                'lr': round(cc.statistic, 3), 'p_value': round(cc.p_value, 4),
+                'rechaza': bool(cc.reject),
+            },
+            'basel': {
+                'zona': b['zone'],
+                'multiplicador_capital': b['capital_multiplier'],
+                'incremento': b['multiplier_increment'],
+                'lectura': b['reading'],
+            },
+        }
+
+    backtests = [
+        _backtest('historical', 'normal', 'Simulación histórica'),
+        _backtest('parametric', 'normal', 'Paramétrico — normal'),
+    ]
+    if req.incluir_t:
+        backtests.append(_backtest('parametric', 't', 'Paramétrico — Student-t'))
+
+    orden_zona = {'GREEN': 0, 'YELLOW': 1, 'RED': 2}
+    peor = max(backtests, key=lambda bt: orden_zona.get(bt['basel']['zona'], 0))
+
+    resultado = {
+        'ticker':           ticker,
+        'timestamp':        datetime.now().isoformat(),
+        'periodo':          req.periodo,
+        'confianza':        req.confianza,
+        'ventana':          req.ventana,
+        'valor_portfolio':  req.valor,
+        'n_observaciones':  len(retornos),
+        'es_975_pct':       round(expected_shortfall(retornos, 0.975) * 100, 3),
+        'metodos':          metodos,
+        'backtests':        backtests,
+        'resumen': {
+            'spread_metodos_pct': round((comp['VaR'].max() / comp['VaR'].min() - 1) * 100, 1),
+            'peor_zona_basel':    peor['basel']['zona'],
+            'peor_modelo':        peor['modelo'],
+            'peor_multiplicador': peor['basel']['multiplicador_capital'],
+        },
+    }
+    _cache[key] = resultado
+    return resultado
 
 
 @app.get("/api/agentes")

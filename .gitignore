@@ -1,0 +1,36 @@
+# ── Python ─────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ── Entornos virtuales ─────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Tests / linters ────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Artefactos de runtime que generan los scripts ──────────
+paper_trading.log
+trades_log.json
+debate_log.txt
+*.log
+# el reporte VaR versionado vive en docs/; ignorar solo copias sueltas en la raíz
+/risk_report.png
+
+# ── Editores / SO ──────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Claves de API (nunca commitear) ────────────────────────
+.env
+secrets.json
