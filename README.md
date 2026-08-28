@@ -510,4 +510,4 @@ la diversificación reduce la volatilidad).
 Estudiante de grado en Física — Universidad Nacional del Sur, Bahía Blanca, Argentina
 [LinkedIn](https://www.linkedin.com/in/francisco-quintanilla-b40367386/)
 
-Licencia MIT.
+
