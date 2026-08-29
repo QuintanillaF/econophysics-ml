@@ -43,6 +43,7 @@ __all__ = [
     "VaRResult",
     "compare_methods",
     "expected_shortfall",
+    "filtered_historical_var",
     "historical_var",
     "monte_carlo_var",
     "parametric_var",
@@ -321,6 +322,75 @@ def monte_carlo_var(
     )
 
 
+def filtered_historical_var(
+    returns: pd.Series | np.ndarray,
+    confidence: float = 0.99,
+    horizon_days: int = 1,
+    portfolio_value: float | None = None,
+    vol: Literal["ewma", "garch"] = "ewma",
+    lam: float = 0.94,
+) -> VaRResult:
+    """Filtered Historical Simulation (Barone-Adesi et al.).
+
+    The failure mode of plain historical simulation is that it treats a return
+    from a calm period and a return from a crisis as equally informative about
+    tomorrow. FHS fixes that in three steps:
+
+    1. Estimate a conditional volatility path with an EWMA or GARCH model.
+    2. Standardise: ``z_t = r_t / sigma_t``. If the volatility model is any good,
+       the ``z`` are close to i.i.d. — the clustering has been divided out.
+    3. VaR is the empirical quantile of ``z`` rescaled by the **one-step-ahead**
+       volatility forecast ``sigma_{T+1}``.
+
+    So the shape of the tail comes from the whole history (no distributional
+    assumption, fat tails included) but its *scale* is today's volatility, not
+    the trailing-window average. This is usually the single most effective fix
+    for the clustered-exception problem a backtest reveals.
+
+    ``vol="ewma"`` (default) is cheap enough to refit every day in a backtest;
+    ``vol="garch"`` is more accurate on multi-day horizons but slow to roll.
+    """
+    from .volatility import ewma_volatility, garch11_fit
+
+    r = _validate(returns, confidence)
+    if vol == "ewma":
+        sigma = np.asarray(ewma_volatility(r, lam), dtype=float)
+        sigma_next = float(lam * sigma[-1] ** 2 + (1.0 - lam) * r[-1] ** 2) ** 0.5
+        note = f"EWMA(lambda={lam}) conditional volatility"
+    elif vol == "garch":
+        model = garch11_fit(r)
+        sigma = np.asarray(model.sigma, dtype=float)
+        sigma_next = model.forecast(1)
+        p = model.params
+        note = (
+            f"GARCH(1,1) omega={p['omega']:.2e} alpha={p['alpha']:.3f} "
+            f"beta={p['beta']:.3f} (persistence {model.persistence:.3f})"
+        )
+    else:
+        raise ValueError("vol must be 'ewma' or 'garch'")
+
+    z = r / sigma
+    z = z[np.isfinite(z)]
+    q = np.quantile(z, 1.0 - confidence)
+    var = float(-q * sigma_next)
+    tail = z[z <= q]
+    es = float(-tail.mean() * sigma_next) if tail.size else var
+
+    if horizon_days > 1:
+        var, es = scale_horizon(var, horizon_days), scale_horizon(es, horizon_days)
+
+    return VaRResult(
+        var=var,
+        expected_shortfall=es,
+        confidence=confidence,
+        method=f"filtered-historical-{vol}",
+        horizon_days=horizon_days,
+        portfolio_value=portfolio_value,
+        n_observations=r.size,
+        note=note,
+    )
+
+
 def expected_shortfall(
     returns: pd.Series | np.ndarray, confidence: float = 0.975
 ) -> float:
@@ -367,6 +437,14 @@ def compare_methods(
             portfolio_value=portfolio_value, distribution="t", seed=seed,
         ),
     ]
+    try:
+        results.append(
+            filtered_historical_var(
+                port, confidence, horizon_days, portfolio_value, vol="ewma"
+            )
+        )
+    except ValueError:
+        pass  # sample too short for a conditional-volatility estimate
 
     rows = []
     for res in results:

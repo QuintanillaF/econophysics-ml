@@ -18,20 +18,39 @@ from scipy import stats
 from varengine import (
     GarchParams,
     Portfolio,
+    PurgedKFold,
     basel_traffic_light,
     christoffersen_independence,
     compare_methods,
     conditional_coverage,
+    deflated_sharpe_ratio,
+    es_backtest_acerbi_szekely,
+    evt_expected_shortfall,
+    evt_var,
+    ewma_volatility,
+    expected_max_sharpe,
     expected_shortfall,
+    factor_betas,
+    filtered_historical_var,
+    fit_factor_model,
+    fit_gpd,
+    garch11_fit,
+    historical_stress,
     historical_var,
     kupiec_pof,
+    ledoit_wolf_cov,
     monte_carlo_var,
+    parametric_stress,
     parametric_var,
+    probabilistic_sharpe_ratio,
+    probability_of_backtest_overfitting,
+    reverse_stress,
     rolling_var_backtest,
     run_full_backtest,
     scale_horizon,
     simulate_market,
 )
+from varengine.stress import HISTORICAL_SCENARIOS, SHOCK_LIBRARY
 
 # ---------------------------------------------------------------- fixtures
 
@@ -340,8 +359,10 @@ class TestWalkForward:
 class TestComparison:
     def test_all_methods_present(self, book):
         df = compare_methods(book.asset_returns, book.w, 0.99, portfolio_value=1e6)
-        assert len(df) == 5
+        # historical, parametric normal/t, monte carlo normal/t, filtered-historical
+        assert len(df) == 6
         assert (df["VaR"] > 0).all()
+        assert any("filtered-historical" in m for m in df.index)
 
     def test_currency_amounts_consistent(self, book):
         value = 2_500_000.0
@@ -390,3 +411,354 @@ class TestDegreesOfFreedomFloor:
         )
         assert len(bt) == len(book.returns) - 250
         assert (bt["var_forecast"] > 0).all()
+
+
+# ---------------------------------------------------------------- conditional volatility
+
+class TestConditionalVolatility:
+    def test_ewma_recursion_matches_definition(self):
+        rng = np.random.default_rng(1)
+        r = pd.Series(rng.normal(0, 0.01, 500))
+        lam = 0.94
+        sigma = ewma_volatility(r, lam)
+        # Reproduce a couple of steps of the recursion by hand.
+        seed = float(np.var(r.iloc[:20], ddof=1))
+        v = seed
+        for i in range(3):
+            assert sigma.iloc[i] == pytest.approx(np.sqrt(v), rel=1e-9)
+            v = lam * v + (1 - lam) * r.iloc[i] ** 2
+
+    def test_ewma_reacts_faster_than_rolling_window(self):
+        """A vol spike should move EWMA more than a 250-day equal-weight sigma."""
+        calm = np.full(400, 0.005)
+        spike = np.concatenate([calm, np.full(10, 0.05)])
+        r = pd.Series(np.random.default_rng(2).normal(0, 1, spike.size) * spike)
+        ewma = ewma_volatility(r, 0.94).iloc[-1]
+        rolling = r.iloc[-250:].std()
+        assert ewma > rolling
+
+    def test_garch_fit_recovers_persistence(self):
+        """GARCH on simulate_market data should find a high, stationary persistence."""
+        px = simulate_market(["X"], n_days=3000, seed=3)
+        r = np.log(px["X"] / px["X"].shift(1)).dropna()
+        model = garch11_fit(r)
+        assert 0.80 < model.persistence < 1.0
+        assert model.params["omega"] > 0
+
+    def test_garch_multiday_forecast_mean_reverts(self):
+        px = simulate_market(["X"], n_days=2000, seed=4)
+        r = np.log(px["X"] / px["X"].shift(1)).dropna()
+        model = garch11_fit(r)
+        # Horizon forecasts are monotone and, because persistence < 1, the
+        # per-day variance implied by forecast(h) converges to the long-run level.
+        fs = [model.forecast(h) for h in (1, 5, 10, 60, 250)]
+        assert fs == sorted(fs)
+        long_run_daily_vol = np.sqrt(model._long_run_var)
+        assert model.forecast(250) / np.sqrt(250) == pytest.approx(
+            long_run_daily_vol, rel=0.25
+        )
+
+
+# ---------------------------------------------------------------- filtered historical simulation
+
+class TestFilteredHistorical:
+    def test_var_properties_hold(self, book):
+        res = filtered_historical_var(book.returns, 0.99, vol="ewma")
+        assert res.var > 0
+        assert res.expected_shortfall >= res.var
+
+    def test_monotone_in_confidence(self, book):
+        vars_ = [filtered_historical_var(book.returns, c, vol="ewma").var
+                 for c in (0.90, 0.95, 0.99)]
+        assert vars_ == sorted(vars_)
+
+    def test_reacts_to_current_volatility(self):
+        """FHS scales by today's vol: the same history, ended calm vs ended wild,
+        must give different VaR."""
+        rng = np.random.default_rng(5)
+        base = rng.standard_t(6, 600) * 0.01
+        calm_tail = rng.standard_t(6, 60) * 0.003
+        wild_tail = rng.standard_t(6, 60) * 0.03
+        calm = pd.Series(np.concatenate([base, calm_tail]))
+        wild = pd.Series(np.concatenate([base, wild_tail]))
+        assert (filtered_historical_var(wild, 0.99, vol="ewma").var
+                > filtered_historical_var(calm, 0.99, vol="ewma").var)
+
+    def test_included_in_compare_methods(self, book):
+        df = compare_methods(book.asset_returns, book.w, 0.99)
+        assert any("filtered-historical" in m for m in df.index)
+
+    def test_rolling_fhs_backtest_completes(self, book):
+        bt = rolling_var_backtest(book.returns, window=250, method="fhs", distribution="ewma")
+        assert len(bt) == len(book.returns) - 250
+        assert (bt["var_forecast"] > 0).all()
+        assert (bt["es_forecast"] >= bt["var_forecast"]).all()
+
+
+# ---------------------------------------------------------------- extreme value theory
+
+class TestEVT:
+    def test_gpd_finds_heavy_tail_on_t_data(self):
+        rng = np.random.default_rng(6)
+        r = pd.Series(rng.standard_t(4, 4000) * 0.01)
+        fit = fit_gpd(r, threshold_q=0.95)
+        assert fit.xi > 0            # heavy tail
+        assert fit.n_exceed >= 10
+
+    def test_evt_var_exceeds_historical_in_far_tail(self, book):
+        """Where historical simulation runs out of data, EVT should be at least
+        as conservative."""
+        evt = evt_var(book.returns, 0.995).var
+        hist = historical_var(book.returns, 0.995).var
+        assert evt >= hist * 0.95   # allow a little slack; EVT smooths the tail
+
+    def test_evt_es_dominates_var(self, book):
+        res = evt_var(book.returns, 0.99)
+        assert res.expected_shortfall >= res.var
+
+    def test_confidence_inside_threshold_rejected(self, book):
+        with pytest.raises(ValueError, match="inside the threshold"):
+            evt_var(book.returns, 0.90, threshold_q=0.95)
+
+
+# ---------------------------------------------------------------- covariance shrinkage + component VaR
+
+class TestShrinkageAndComponentVaR:
+    def test_ledoit_wolf_is_psd(self, book):
+        cov = ledoit_wolf_cov(book.asset_returns)
+        assert np.all(np.linalg.eigvalsh(cov) > -1e-12)
+
+    def test_shrinkage_beats_sample_on_short_window(self):
+        """On a short sample the shrunk estimate should be closer to the truth."""
+        rng = np.random.default_rng(7)
+        n = 8
+        true_cov = 0.0001 * (0.3 * np.ones((n, n)) + 0.7 * np.eye(n))
+        errs_sample, errs_lw = [], []
+        for s in range(20):
+            r = pd.DataFrame(
+                np.random.default_rng(s).multivariate_normal(np.zeros(n), true_cov, 40)
+            )
+            sample = r.cov().to_numpy()
+            lw = ledoit_wolf_cov(r)
+            errs_sample.append(np.linalg.norm(sample - true_cov))
+            errs_lw.append(np.linalg.norm(lw - true_cov))
+        assert np.mean(errs_lw) < np.mean(errs_sample)
+
+    def test_component_var_sums_to_total(self, book):
+        cv = book.component_var(0.99, distribution="normal")
+        z = stats.norm.ppf(0.01)
+        total = -z * book.volatility          # zero-mean parametric VaR
+        assert cv["component"].sum() == pytest.approx(total, rel=1e-6)
+        assert cv["component_pct"].sum() == pytest.approx(1.0)
+
+    def test_incremental_var_positive_for_a_risk_adding_asset(self):
+        """A big, largely independent, high-vol sleeve must raise portfolio VaR."""
+        rng = np.random.default_rng(8)
+        calm = np.cumprod(1 + rng.normal(0.0003, 0.006, (800, 2)), axis=0) * 100
+        wild = np.cumprod(1 + rng.normal(0.0, 0.03, (800, 1)), axis=0) * 100
+        px = pd.DataFrame(np.hstack([calm, wild]), columns=["calm1", "calm2", "wild"])
+        book = Portfolio(px, weights=[0.35, 0.35, 0.30])
+        inc = book.component_var(0.99)["incremental"]
+        assert inc["wild"] > 0
+
+
+# ---------------------------------------------------------------- ES backtesting
+
+class TestESBacktest:
+    def test_well_calibrated_es_not_rejected(self):
+        """Normal returns, normal VaR/ES forecasts: the ES test should pass."""
+        rng = np.random.default_rng(9)
+        r = rng.normal(0, 0.01, 4000)
+        z = stats.norm.ppf(0.01)
+        var = np.full_like(r, -z * 0.01)
+        es = np.full_like(r, 0.01 * stats.norm.pdf(z) / 0.01)
+        res = es_backtest_acerbi_szekely(r, var, es, 0.99, n_boot=500, seed=1)
+        assert not res.reject
+
+    def test_understated_es_is_rejected(self):
+        """Fat-tailed losses against an ES that is far too small."""
+        rng = np.random.default_rng(10)
+        r = rng.standard_t(3, 4000) * 0.01
+        z = stats.norm.ppf(0.01)
+        var = np.full_like(r, -z * 0.01)
+        es = np.full_like(r, 0.011)            # deliberately too low for t(3) tails
+        res = es_backtest_acerbi_szekely(r, var, es, 0.99, n_boot=500, seed=2)
+        assert res.reject
+        assert res.statistic < 0
+
+    def test_in_full_backtest_bundle(self, book):
+        out = run_full_backtest(book.returns, window=250, confidence=0.99)
+        assert "es_test" in out
+        assert np.isfinite(out["es_test"].statistic)
+
+
+# ---------------------------------------------------------------- stress testing
+
+@pytest.fixture(scope="module")
+def factor_returns() -> pd.DataFrame:
+    """Synthetic risk-factor return panel, so stress tests run offline."""
+    rng = np.random.default_rng(11)
+    idx = pd.bdate_range("2007-01-01", periods=4500)
+    cols = ["equity", "rates", "credit", "usd", "gold", "oil", "crypto"]
+    data = rng.multivariate_normal(
+        np.zeros(len(cols)),
+        0.0001 * (0.2 * np.ones((len(cols), len(cols))) + 0.8 * np.eye(len(cols))),
+        len(idx),
+    )
+    return pd.DataFrame(data, index=idx, columns=cols)
+
+
+@pytest.fixture(scope="module")
+def stress_book(factor_returns) -> Portfolio:
+    """A portfolio whose returns are a known linear combination of the factors."""
+    betas = {"equity": 1.1, "credit": 0.4, "crypto": 0.2}
+    port_ret = sum(b * factor_returns[f] for f, b in betas.items())
+    port_ret += np.random.default_rng(12).normal(0, 0.001, len(port_ret))
+    prices = 100 * (1 + port_ret).cumprod().to_frame("BOOK")
+    return Portfolio(prices, value=1_000_000.0)
+
+
+class TestStress:
+    def test_factor_betas_recover_the_exposure(self, stress_book, factor_returns):
+        betas = factor_betas(stress_book, factor_returns)
+        assert betas["equity"] == pytest.approx(1.1, abs=0.15)
+        assert betas["crypto"] == pytest.approx(0.2, abs=0.15)
+
+    def test_historical_replay_is_a_loss_in_a_crash(self, stress_book, factor_returns):
+        # Force a crash into the COVID window of the synthetic factor panel.
+        fr = factor_returns.copy()
+        win = fr.loc["2020-02-19":"2020-03-23"].index
+        fr.loc[win, "equity"] = -0.03
+        fr.loc[win, "credit"] = -0.02
+        res = historical_stress(stress_book, "COVID crash Mar 2020", fr)
+        assert res.pnl_pct < 0
+
+    def test_parametric_equity_crash_loses_money(self, stress_book, factor_returns):
+        res = parametric_stress(stress_book, "equity_crash", factor_returns)
+        assert res.pnl_pct < 0
+        assert res.pnl_amount == pytest.approx(res.pnl_pct * stress_book.value)
+
+    def test_reverse_stress_hits_the_target(self, stress_book, factor_returns):
+        res = reverse_stress(stress_book, target_loss_pct=0.10,
+                             direction="risk_off", factor_returns=factor_returns)
+        assert res.pnl_pct == pytest.approx(-0.10)
+        # The scaled moves, fed back through the betas, must reproduce -10%.
+        betas = factor_betas(stress_book, factor_returns)
+        pnl = sum(betas.get(f, 0.0) * m for f, m in res.factor_moves.items())
+        assert pnl == pytest.approx(-0.10, abs=1e-6)
+
+    def test_crypto_scenarios_present(self):
+        for name in ("Terra / UST May 2022", "FTX collapse Nov 2022"):
+            assert name in HISTORICAL_SCENARIOS
+        for name in ("stablecoin_depeg", "exchange_insolvency"):
+            assert name in SHOCK_LIBRARY
+
+    def test_ftx_scenario_hurts_a_crypto_book(self, factor_returns):
+        fr = factor_returns.copy()
+        win = fr.loc["2022-11-05":"2022-11-14"].index
+        fr.loc[win, "crypto"] = -0.08
+        # A book that is mostly crypto.
+        port_ret = 0.9 * fr["crypto"] + 0.1 * fr["equity"]
+        px = 100 * (1 + port_ret).cumprod().to_frame("CRYPTOBOOK")
+        book = Portfolio(px, value=1_000_000.0)
+        res = historical_stress(book, "FTX collapse Nov 2022", fr)
+        assert res.pnl_pct < 0
+
+
+# ---------------------------------------------------------------- factor model
+
+@pytest.fixture(scope="module")
+def ff_factors() -> pd.DataFrame:
+    """A synthetic Fama-French-style panel, so the tests run offline."""
+    rng = np.random.default_rng(20)
+    idx = pd.bdate_range("2018-01-01", periods=1200)
+    cols = ["Mkt-RF", "SMB", "HML", "RMW", "CMA", "Mom"]
+    data = rng.normal(0, 0.008, (len(idx), len(cols)))
+    df = pd.DataFrame(data, index=idx, columns=cols)
+    df["RF"] = 0.00008
+    return df
+
+
+class TestFactorModel:
+    def test_recovers_known_betas(self, ff_factors):
+        rng = np.random.default_rng(21)
+        true = {"Mkt-RF": 1.15, "SMB": 0.40, "HML": -0.30, "Mom": 0.20}
+        port = ff_factors["RF"].copy()
+        for f, b in true.items():
+            port = port + b * ff_factors[f]
+        port = port + rng.normal(0, 0.002, len(port))
+        port.name = "port"
+
+        fm = fit_factor_model(port, factors=ff_factors)
+        for f, b in true.items():
+            assert fm.betas[f] == pytest.approx(b, abs=0.08)
+        assert fm.r_squared > 0.8
+
+    def test_risk_contributions_sum_to_one(self, ff_factors):
+        rng = np.random.default_rng(22)
+        port = (1.0 * ff_factors["Mkt-RF"] + 0.3 * ff_factors["HML"]
+                + ff_factors["RF"] + rng.normal(0, 0.003, len(ff_factors)))
+        port.name = "port"
+        fm = fit_factor_model(port, factors=ff_factors)
+        assert fm.risk_contribution.sum() == pytest.approx(1.0, abs=1e-6)
+        assert 0.0 <= fm.idiosyncratic_share <= 1.0
+
+    def test_pure_noise_has_low_r_squared_and_high_idio(self, ff_factors):
+        rng = np.random.default_rng(23)
+        port = pd.Series(rng.normal(0, 0.01, len(ff_factors)), index=ff_factors.index, name="port")
+        fm = fit_factor_model(port, factors=ff_factors)
+        assert fm.r_squared < 0.1
+        assert fm.idiosyncratic_share > 0.9
+
+
+# ---------------------------------------------------------------- backtest diagnostics
+
+class TestDiagnostics:
+    def test_psr_high_for_a_clearly_profitable_series(self):
+        rng = np.random.default_rng(30)
+        r = rng.normal(0.001, 0.008, 2000)   # annual Sharpe ~2
+        assert probabilistic_sharpe_ratio(r, sr_benchmark=0.0) > 0.99
+
+    def test_psr_about_half_at_own_sharpe(self):
+        rng = np.random.default_rng(31)
+        r = rng.normal(0.0005, 0.01, 3000)
+        sr = r.mean() / r.std(ddof=1) * np.sqrt(252)
+        assert probabilistic_sharpe_ratio(r, sr_benchmark=sr) == pytest.approx(0.5, abs=0.05)
+
+    def test_deflation_threshold_rises_with_trials(self):
+        lo = expected_max_sharpe(5, trials_sr_std=0.5 / np.sqrt(252))
+        hi = expected_max_sharpe(500, trials_sr_std=0.5 / np.sqrt(252))
+        assert hi > lo > 0
+
+    def test_noise_strategy_fails_dsr_after_many_trials(self):
+        rng = np.random.default_rng(32)
+        r = pd.Series(rng.normal(0.0, 0.01, 1500))  # zero edge
+        res = deflated_sharpe_ratio(r, n_trials=1000)
+        assert res["dsr"] < 0.5
+        assert res["verdict"] == "likely overfit"
+
+    def test_pbo_is_high_for_pure_noise_and_low_for_a_real_winner(self):
+        """The discriminating property: selecting on noise does not generalise,
+        selecting a genuinely-better trial does. PBO on 20 noise trials is high
+        (well above 0); adding one trial that dominates everywhere collapses it."""
+        rng = np.random.default_rng(33)
+        M = rng.normal(0, 0.01, (2000, 20))
+        pbo_noise = probability_of_backtest_overfitting(M, n_splits=10)["pbo"]
+
+        M2 = M.copy()
+        M2[:, 0] += 0.0015                    # trial 0 dominates in every subset
+        pbo_winner = probability_of_backtest_overfitting(M2, n_splits=10)["pbo"]
+
+        assert pbo_noise > 0.30
+        assert pbo_winner < 0.15
+        assert pbo_winner < pbo_noise
+
+    def test_purged_kfold_leaves_a_gap(self):
+        pk = PurgedKFold(n_splits=5, horizon=10, embargo=5)
+        n = 200
+        for train, test in pk.split(np.arange(n)):
+            lo, hi = test.min() - 10, test.max() + 5
+            assert not any(lo <= i <= hi for i in train)
+        # every observation is tested exactly once
+        tested = np.concatenate([te for _, te in pk.split(np.arange(n))])
+        assert sorted(tested) == list(range(n))

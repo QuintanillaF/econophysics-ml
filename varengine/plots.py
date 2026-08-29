@@ -10,7 +10,13 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-__all__ = ["plot_backtest", "plot_method_comparison", "plot_return_distribution", "risk_dashboard"]
+__all__ = [
+    "plot_backtest",
+    "plot_method_comparison",
+    "plot_return_distribution",
+    "plot_stress",
+    "risk_dashboard",
+]
 
 INK = "#131a1f"
 PLOT = "#1b4a5a"
@@ -98,17 +104,44 @@ def plot_method_comparison(df: pd.DataFrame, ax=None):
     return ax
 
 
-def risk_dashboard(bt, returns, var_levels, comparison, path="risk_report.png"):
-    """Assemble the three panels into a single report image."""
-    fig = plt.figure(figsize=(13, 9))
-    gs = fig.add_gridspec(2, 2, height_ratios=[1, 1], hspace=0.32, wspace=0.22)
+def plot_stress(stress_df: pd.DataFrame, ax=None):
+    """Horizontal bars of portfolio P&L under each stress scenario."""
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 4))
+
+    df = stress_df.sort_values("pnl_pct")
+    y = np.arange(len(df))
+    colours = [BREACH if v < 0 else "#2f7d5d" for v in df["pnl_pct"]]
+    ax.barh(y, df["pnl_pct"] * 100, color=colours, alpha=0.9)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(df.index, fontsize=8)
+    ax.axvline(0, color=GRID, lw=0.8)
+    ax.set_xlabel("portfolio P&L (%)")
+    ax.set_title("Stress scenarios", fontsize=11, color=INK, loc="left", weight="bold")
+    _style(ax)
+    return ax
+
+
+def risk_dashboard(bt, returns, var_levels, comparison, path="risk_report.png",
+                   stress_df=None):
+    """Assemble the panels into a single report image.
+
+    Three panels by default (backtest, return distribution, method comparison);
+    a fourth stress panel is added when ``stress_df`` is supplied.
+    """
+    rows = 3 if stress_df is not None else 2
+    fig = plt.figure(figsize=(13, 4.5 * rows))
+    gs = fig.add_gridspec(rows, 2, hspace=0.34, wspace=0.22)
 
     plot_backtest(bt, ax=fig.add_subplot(gs[0, :]))
     plot_return_distribution(returns, var_levels, ax=fig.add_subplot(gs[1, 0]))
     plot_method_comparison(comparison, ax=fig.add_subplot(gs[1, 1]))
+    if stress_df is not None:
+        plot_stress(stress_df, ax=fig.add_subplot(gs[2, :]))
 
     fig.suptitle("Portfolio market-risk report", fontsize=14, weight="bold",
-                 color=INK, x=0.007, ha="left", y=0.985)
+                 color=INK, x=0.007, ha="left", y=0.99)
     fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return path

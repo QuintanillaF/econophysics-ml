@@ -82,7 +82,8 @@ class FuenteYFinance:
 
 # ── Fuente Binance REST ───────────────────────────────────────
 class FuenteBinance:
-    BASE = 'https://api.binance.com/api/v3'
+    BASE  = 'https://api.binance.com/api/v3'
+    FBASE = 'https://fapi.binance.com'          # mercado de futuros perpetuos
 
     def __init__(self):
         import requests
@@ -101,6 +102,13 @@ class FuenteBinance:
             r.raise_for_status(); return r.json()
         except Exception as e:
             logger.debug(f"Binance {ep}: {e}"); return None
+
+    def _fget(self, ep: str, params: dict = None):
+        try:
+            r = self.session.get(f"{self.FBASE}{ep}", params=params or {}, timeout=15)
+            r.raise_for_status(); return r.json()
+        except Exception as e:
+            logger.debug(f"Binance futures {ep}: {e}"); return None
 
     def get_klines(self, symbol: str, interval: str = '1d', limit: int = 500) -> pd.DataFrame:
         data = self._get('/klines', {'symbol':symbol,'interval':interval,'limit':min(limit,1000)})
@@ -143,6 +151,112 @@ class FuenteBinance:
         r  = vc/(vv+1e-10)
         señal = 'ALCISTA' if r>1.5 else 'BAJISTA' if r<0.67 else 'NEUTRAL'
         return {'señal':señal,'detalle':f'Compras=${vc:,.0f} Ventas=${vv:,.0f} ({len(ballenas)} ballenas)','n':len(ballenas),'ratio':round(r,2)}
+
+    # ── Microestructura de futuros perpetuos ─────────────────────
+    def get_funding_rate(self, symbol: str) -> dict:
+        """Funding rate actual + media de los últimos 7 días (anualizada).
+
+        El funding es lo que los longs pagan a los shorts (o viceversa) cada 8h en
+        un perpetuo. Positivo y alto = demanda de apalancamiento long saturada →
+        señal contrarian bajista clásica.
+        """
+        pi = self._fget('/fapi/v1/premiumIndex', {'symbol': symbol})
+        hist = self._fget('/fapi/v1/fundingRate', {'symbol': symbol, 'limit': 21})  # ~7 días
+        if not pi:
+            return {}
+        actual = float(pi.get('lastFundingRate', 0))
+        rates = [float(h['fundingRate']) for h in hist] if isinstance(hist, list) else []
+        media_7d = float(np.mean(rates)) if rates else actual
+        return {
+            'actual': round(actual, 6),
+            'media_7d': round(media_7d, 6),
+            'anualizado_pct': round(media_7d * 3 * 365 * 100, 2),  # 3 pagos/día
+            'proximo': pi.get('nextFundingTime'),
+            'señal': ('LONGS SATURADOS' if media_7d > 0.0005 else
+                      'SHORTS SATURADOS' if media_7d < -0.0003 else 'NEUTRAL'),
+        }
+
+    def get_basis(self, symbol: str) -> dict:
+        """Basis del perpetuo: (mark - index) / index.
+
+        Positivo = el perpetuo cotiza sobre el spot (contango, apalancamiento
+        long); negativo = backwardation (presión short / miedo).
+        """
+        pi = self._fget('/fapi/v1/premiumIndex', {'symbol': symbol})
+        if not pi:
+            return {}
+        mark, index = float(pi.get('markPrice', 0)), float(pi.get('indexPrice', 0))
+        if index <= 0:
+            return {}
+        b = (mark - index) / index
+        return {
+            'mark': mark, 'index': index,
+            'basis_pct': round(b * 100, 4),
+            'estado': 'CONTANGO' if b > 0 else 'BACKWARDATION',
+        }
+
+    def get_open_interest(self, symbol: str) -> dict:
+        """Open interest actual + cambio a 7 días.
+
+        OI subiendo con precio subiendo = dinero nuevo apalancado entrando; OI
+        subiendo con precio cayendo = shorts agresivos. OI cayendo fuerte =
+        liquidaciones / deleveraging.
+        """
+        cur = self._fget('/fapi/v1/openInterest', {'symbol': symbol})
+        hist = self._fget('/futures/data/openInterestHist',
+                          {'symbol': symbol, 'period': '1d', 'limit': 8})
+        if not cur:
+            return {}
+        oi_now = float(cur.get('openInterest', 0))
+        cambio_7d = None
+        if isinstance(hist, list) and len(hist) >= 2:
+            oi_prev = float(hist[0].get('sumOpenInterest', 0))
+            if oi_prev > 0:
+                cambio_7d = round((oi_now / oi_prev - 1) * 100, 2)
+        return {'contratos': oi_now, 'cambio_7d_pct': cambio_7d}
+
+    def get_long_short_ratio(self, symbol: str) -> dict:
+        """Ratio cuentas long / short (todas las cuentas de Binance Futures)."""
+        d = self._fget('/futures/data/globalLongShortAccountRatio',
+                       {'symbol': symbol, 'period': '1d', 'limit': 1})
+        if not isinstance(d, list) or not d:
+            return {}
+        e = d[-1]
+        ratio = float(e.get('longShortRatio', 1))
+        return {
+            'ratio': round(ratio, 3),
+            'long_pct': round(float(e.get('longAccount', 0)) * 100, 1),
+            'short_pct': round(float(e.get('shortAccount', 0)) * 100, 1),
+            'sesgo': 'LARGOS' if ratio > 1.5 else 'CORTOS' if ratio < 0.8 else 'EQUILIBRADO',
+        }
+
+    def get_microestructura_cripto(self, symbol: str) -> dict:
+        """Bundle: funding + basis + open interest + long/short, con una lectura."""
+        funding = self.get_funding_rate(symbol)
+        basis   = self.get_basis(symbol)
+        oi      = self.get_open_interest(symbol)
+        ls      = self.get_long_short_ratio(symbol)
+        if not funding and not basis:
+            return {'disponible': False}
+
+        # Lectura combinada.
+        f_alto = funding.get('media_7d', 0) > 0.0005
+        oi_sube = (oi.get('cambio_7d_pct') or 0) > 5
+        if f_alto and oi_sube:
+            lectura = 'Funding alto + OI subiendo: trade long apalancado saturado → riesgo de long squeeze'
+        elif funding.get('media_7d', 0) < -0.0003:
+            lectura = 'Funding negativo: shorts pagando → posible short squeeze si el precio gira'
+        elif (oi.get('cambio_7d_pct') or 0) < -10:
+            lectura = 'OI cayendo fuerte: deleveraging / liquidaciones en curso'
+        else:
+            lectura = 'Microestructura sin extremos'
+
+        return {
+            'disponible': True, 'symbol': symbol,
+            'funding': funding, 'basis': basis,
+            'open_interest': oi, 'long_short': ls,
+            'lectura': lectura,
+        }
 
 
 # ── Fuente CoinGecko ──────────────────────────────────────────

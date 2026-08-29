@@ -598,12 +598,15 @@
 
   .var-bt-row {
     display: grid;
-    grid-template-columns: 1.4fr 0.8fr 1fr 1fr;
+    grid-template-columns: 1.3fr 0.9fr 1fr 0.8fr 0.9fr;
     gap: 8px;
     align-items: center;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
     font-size: 11px;
+  }
+  @media (max-width: 760px) {
+    .var-bt-row { grid-template-columns: 1fr 1fr; }
   }
   .var-bt-row .modelo { font-weight: 600; }
   .var-verdict.ok   { color: var(--green); }
@@ -686,6 +689,20 @@
   <!-- ── SEÑALES RÁPIDAS ───────────────────────────────── -->
   <div class="signals-bar" id="signals-bar">
     <div class="loading"><div class="spinner"></div> Cargando señales...</div>
+  </div>
+
+  <!-- ── MACRO / RÉGIMEN DE MERCADO ────────────────────── -->
+  <div class="portfolio-section" style="margin-top:16px">
+    <div class="section-title" style="justify-content:space-between">
+      <span><span>🌐</span> MACRO / RÉGIMEN DE MERCADO</span>
+      <button class="btn ghost" style="padding:4px 10px;font-size:10px"
+              onclick="cargarMacro()">REFRESCAR</button>
+    </div>
+    <div class="card">
+      <div id="macro-content">
+        <div class="loading"><div class="spinner"></div> Cargando datos macro...</div>
+      </div>
+    </div>
   </div>
 
   <!-- ── GRID PRINCIPAL ───────────────────────────────── -->
@@ -909,6 +926,21 @@ function renderStats(d) {
   const ddClass  = 'red'
   const shClass  = colorClass(s.sharpe, [0.5, 1])
 
+  let micro = ''
+  const mx = d.extra_crypto && d.extra_crypto.microestructura
+  if (mx) {
+    const f = mx.funding || {}, b = mx.basis || {}, oi = mx.open_interest || {}, ls = mx.long_short || {}
+    micro = `
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">
+      <strong style="color:var(--text2)">MICROESTRUCTURA PERPETUOS</strong><br>
+      funding ${f.anualizado_pct != null ? (f.anualizado_pct>=0?'+':'')+f.anualizado_pct.toFixed(1)+'% anual' : '—'}
+      &nbsp;│&nbsp; basis ${b.basis_pct != null ? (b.basis_pct>=0?'+':'')+b.basis_pct.toFixed(2)+'%' : '—'} (${b.estado || '—'})
+      &nbsp;│&nbsp; OI 7d ${oi.cambio_7d_pct != null ? (oi.cambio_7d_pct>=0?'+':'')+oi.cambio_7d_pct.toFixed(1)+'%' : '—'}
+      &nbsp;│&nbsp; L/S ${ls.ratio != null ? ls.ratio.toFixed(2) : '—'}
+      <br><span style="color:var(--text)">${mx.lectura || ''}</span>
+    </div>`
+  }
+
   $('card-stats').innerHTML = `
     <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS — ${d.ticker}</div>
     <div class="stat-grid">
@@ -943,7 +975,8 @@ function renderStats(d) {
         &nbsp;│&nbsp; Vol ${reg.vol_actual.toFixed(1)}%
         (umbral ${reg.vol_mediana.toFixed(1)}%)
       </span>
-    </div>`
+    </div>
+    ${micro}`
 }
 
 // ── Render Señal ML ─────────────────────────────────────────
@@ -1285,13 +1318,12 @@ function renderVaR(d) {
   }
   metodos += '</table>'
 
+  const verdict = (ok) => `<span class="var-verdict ${ok ? 'ok' : 'fail'}">${ok ? 'pasa' : 'RECHAZA'}</span>`
   let backtests = `
     <div class="var-bt-row" style="color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-      <div>Modelo</div><div>Excepciones</div><div>Kupiec / Christoffersen</div><div>Zona Basilea</div>
+      <div>Modelo</div><div>Excepciones</div><div>Kupiec / Christoffersen</div><div>ES (Acerbi-Székely)</div><div>Zona Basilea</div>
     </div>`
   for (const bt of d.backtests) {
-    const kOk = !bt.kupiec.rechaza
-    const cOk = !bt.christoffersen.rechaza
     const zona = bt.basel.zona.toLowerCase()
     const zonaEmoji = zona === 'green' ? '🟢' : zona === 'yellow' ? '🟡' : '🔴'
     backtests += `
@@ -1300,15 +1332,66 @@ function renderVaR(d) {
         <div>${bt.n_excepciones} / ${bt.n_dias}
           <span style="color:var(--text2)">(${bt.tasa_obs_pct.toFixed(2)}% vs ${bt.tasa_esp_pct.toFixed(2)}%)</span></div>
         <div>
-          <span class="var-verdict ${kOk ? 'ok' : 'fail'}">${kOk ? 'pasa' : 'RECHAZA'}</span>
+          ${verdict(!bt.kupiec.rechaza)}
           <span style="color:var(--text2)">p=${bt.kupiec.p_value.toFixed(3)}</span> /
-          <span class="var-verdict ${cOk ? 'ok' : 'fail'}">${cOk ? 'pasa' : 'RECHAZA'}</span>
+          ${verdict(!bt.christoffersen.rechaza)}
+        </div>
+        <div>
+          ${verdict(!bt.es_test.rechaza)}
+          <span style="color:var(--text2)">Z2=${bt.es_test.z2.toFixed(2)}</span>
         </div>
         <div>
           <span class="zona-badge ${zona}">${zonaEmoji} ${bt.basel.zona}</span>
           <span style="color:var(--text2)">×${bt.basel.multiplicador_capital.toFixed(2)}</span>
         </div>
       </div>`
+  }
+
+  let componentes = ''
+  if (d.componentes && d.componentes.length > 1) {
+    componentes = `
+      <div style="margin-top:18px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px">
+        VaR componente · ¿de dónde viene el riesgo?
+      </div>
+      <table class="var-table">
+        <tr><th>Activo</th><th>VaR marginal</th><th>Componente</th><th>Share</th></tr>`
+    for (const c of d.componentes) {
+      componentes += `<tr>
+        <td>${c.activo}</td>
+        <td>${c.marginal_pct.toFixed(3)}%</td>
+        <td>${c.componente_pct.toFixed(3)}%</td>
+        <td>${c.share.toFixed(1)}%</td>
+      </tr>`
+    }
+    componentes += '</table>'
+  }
+
+  let factores = ''
+  const fm = d.factor_model
+  if (fm) {
+    const alphaSig = Math.abs(fm.alpha_tstat) >= 2
+    factores = `
+      <div style="margin-top:18px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px">
+        Modelo de factores (${fm.source === 'fama_french' ? 'Fama-French 5 + Mom' : 'estilo ETF'})
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin:6px 0 4px">
+        R² <strong style="color:var(--text)">${(fm.r_squared*100).toFixed(0)}%</strong>
+        &nbsp;│&nbsp; alpha anual
+        <strong style="color:${fm.alpha_anual_pct>=0?'var(--green)':'var(--red)'}">${fm.alpha_anual_pct>=0?'+':''}${fm.alpha_anual_pct.toFixed(1)}%</strong>
+        (t=${fm.alpha_tstat>=0?'+':''}${fm.alpha_tstat.toFixed(1)}${alphaSig?'':', no significativo'})
+        &nbsp;│&nbsp; idiosincrático <strong style="color:var(--text)">${fm.idiosincratico_pct.toFixed(0)}%</strong>
+      </div>
+      <table class="var-table">
+        <tr><th>Factor</th><th>Beta</th><th>t</th><th>Riesgo</th></tr>`
+    for (const b of fm.betas) {
+      factores += `<tr>
+        <td>${b.factor}</td>
+        <td style="color:${Math.abs(b.tstat)>=2?'var(--text)':'var(--text2)'}">${b.beta>=0?'+':''}${b.beta.toFixed(2)}</td>
+        <td style="color:var(--text2)">${b.tstat>=0?'+':''}${b.tstat.toFixed(1)}</td>
+        <td>${b.riesgo_pct.toFixed(0)}%</td>
+      </tr>`
+    }
+    factores += '</table>'
   }
 
   const peorZona = rs.peor_zona_basel.toLowerCase()
@@ -1332,15 +1415,93 @@ function renderVaR(d) {
       &nbsp;│&nbsp; Expected Shortfall 97.5% (FRTB): <strong style="color:var(--text)">${d.es_975_pct.toFixed(3)}%</strong>
     </div>
     ${metodos}
+    ${componentes}
+    ${factores}
 
     <div style="margin-top:18px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px">
-      Backtest walk-forward · tests supervisores
+      Backtest walk-forward · tests supervisores (VaR y ES)
     </div>
     ${backtests}
 
     <div style="margin-top:14px;padding:10px 12px;border-radius:4px;background:var(--bg3);
                 border:1px solid var(--border);font-size:11px;line-height:1.6">
       ${alerta}
+    </div>`
+}
+
+// ── Macro / régimen de mercado ──────────────────────────────
+async function cargarMacro() {
+  $('macro-content').innerHTML =
+    `<div class="loading"><div class="spinner"></div> Cargando datos macro...</div>`
+  try {
+    const r = await fetch(`${API}/mercado`)
+    if (!r.ok) {
+      const err = await r.json()
+      throw new Error(err.detail || 'Error del servidor')
+    }
+    renderMacro(await r.json())
+  } catch (e) {
+    $('macro-content').innerHTML = `<div class="error-msg">⚠️ ${e.message}</div>`
+  }
+}
+
+function renderMacro(d) {
+  const cv = d.curva_tasas, vts = d.vix_term_structure, cr = d.credito
+  const dl = d.dolar, reg = d.regimen
+
+  const regClass = reg.estado === 'RISK-ON' ? 'green' :
+                   reg.estado === 'RISK-OFF' ? 'estres' : ''
+  const regBadge = reg.estado === 'RISK-ON'
+    ? `<span class="regimen-badge calma">✅ ${reg.estado} (score ${reg.score >= 0 ? '+' : ''}${reg.score})</span>`
+    : reg.estado === 'RISK-OFF'
+    ? `<span class="regimen-badge estres">🔴 ${reg.estado} (score ${reg.score})</span>`
+    : `<span class="regimen-badge" style="background:rgba(90,122,153,.12);color:var(--text2)">➖ NEUTRAL (score ${reg.score >= 0 ? '+' : ''}${reg.score})</span>`
+
+  const curvaBadge = cv.invertida
+    ? `<span class="zona-badge red">🔴 curva invertida</span>`
+    : `<span class="zona-badge green">🟢 pendiente ${cv.pendiente_10y_3m >= 0 ? '+' : ''}${cv.pendiente_10y_3m}pp</span>`
+  const vixBadge = vts.ratio_vix_vix3m > 1
+    ? `<span class="zona-badge red">🔴 VIX backwardation ${vts.ratio_vix_vix3m}</span>`
+    : `<span class="zona-badge green">🟢 VIX contango ${vts.ratio_vix_vix3m}</span>`
+  const crBadge = (cr.percentil_historico != null)
+    ? (cr.percentil_historico < 0.2
+        ? `<span class="zona-badge red">🔴 crédito HY estresado (p${(cr.percentil_historico*100).toFixed(0)})</span>`
+        : `<span class="zona-badge green">🟢 crédito HY p${(cr.percentil_historico*100).toFixed(0)}</span>`)
+    : ''
+
+  let corr = ''
+  for (const [k, v] of Object.entries(d.correlaciones || {})) {
+    corr += `<tr><td>${k}</td><td>${v >= 0 ? '+' : ''}${v.toFixed(2)}</td></tr>`
+  }
+
+  $('macro-content').innerHTML = `
+    <div class="card-title"><span class="icon">🌐</span>RÉGIMEN DE MERCADO
+      &nbsp; ${regBadge}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">
+      ${curvaBadge} ${vixBadge} ${crBadge}
+      <span class="zona-badge" style="background:var(--bg3);color:var(--text2)">DXY ${dl.nivel} (${dl.tendencia})</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;font-size:11px">
+      <table class="var-table">
+        <tr><th>Curva de tasas</th><th></th></tr>
+        <tr><td>10y</td><td>${cv.nivel_10y}%</td></tr>
+        <tr><td>pendiente 10y-3m</td><td>${cv.pendiente_10y_3m >= 0 ? '+' : ''}${cv.pendiente_10y_3m}pp</td></tr>
+        <tr><td>curvatura</td><td>${cv.curvatura ?? '—'}</td></tr>
+        <tr><td colspan="2" style="color:var(--text2)">${cv.lectura}</td></tr>
+      </table>
+      <table class="var-table">
+        <tr><th>Volatilidad</th><th></th></tr>
+        <tr><td>VIX / VIX3M</td><td>${vts.vix} / ${vts.vix3m}</td></tr>
+        <tr><td>MOVE (bonos)</td><td>${vts.move ?? '—'}</td></tr>
+        <tr><td>estado</td><td>${vts.estado}</td></tr>
+        <tr><td colspan="2" style="color:var(--text2)">${cr.lectura || ''}</td></tr>
+      </table>
+    </div>
+    ${corr ? `<div style="margin-top:12px;font-size:11px;color:var(--text2)">Correlaciones cross-asset 60d:</div>
+      <table class="var-table" style="max-width:280px">${corr}</table>` : ''}
+    <div style="margin-top:12px;font-size:11px;color:var(--text2)">
+      ${(reg.señales || []).join(' &nbsp;·&nbsp; ')}
     </div>`
 }
 
@@ -1388,6 +1549,7 @@ async function cargarTrades() {
 // ── Init ─────────────────────────────────────────────────────
 window.onload = async () => {
   renderPortfolioTickers()
+  cargarMacro()
   await cargarSenales()
   await cargarTrades()
 

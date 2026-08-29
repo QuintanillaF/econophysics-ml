@@ -37,6 +37,7 @@ __all__ = [
     "basel_traffic_light",
     "christoffersen_independence",
     "conditional_coverage",
+    "es_backtest_acerbi_szekely",
     "kupiec_pof",
     "rolling_var_backtest",
     "run_full_backtest",
@@ -285,10 +286,22 @@ def rolling_var_backtest(
     the same data leaks future information and will make any model look
     excellent.
 
-    Returns a frame indexed by date with the forecast, the realised return, and
-    an exception flag.
+    ``method``:
+
+    - ``"historical"`` — empirical quantile of the window.
+    - ``"parametric"`` — normal or Student-t (set ``distribution``).
+    - ``"fhs"`` — filtered historical simulation. ``distribution`` selects the
+      volatility model: ``"ewma"`` (fast, refit-free) or ``"garch"`` (a GARCH
+      MLE per window — correct but slow over a long sample).
+
+    Returns a frame indexed by date with the VaR forecast, the ES forecast, the
+    realised return, and an exception flag.
     """
-    from .var import historical_var, parametric_var  # local import avoids a cycle
+    from .var import (  # local import avoids a cycle
+        filtered_historical_var,
+        historical_var,
+        parametric_var,
+    )
 
     if window < 30:
         raise ValueError("window must be at least 30 observations")
@@ -298,7 +311,7 @@ def rolling_var_backtest(
         )
 
     r = returns.dropna()
-    dates, forecasts, realised = [], [], []
+    dates, var_f, es_f, realised = [], [], [], []
 
     for i in range(window, len(r)):
         train = r.iloc[i - window : i]
@@ -306,18 +319,93 @@ def rolling_var_backtest(
             est = historical_var(train, confidence)
         elif method == "parametric":
             est = parametric_var(train, confidence, distribution=distribution)
+        elif method == "fhs":
+            vol = distribution if distribution in ("ewma", "garch") else "ewma"
+            est = filtered_historical_var(train, confidence, vol=vol)
         else:
-            raise ValueError("method must be 'historical' or 'parametric'")
+            raise ValueError("method must be 'historical', 'parametric' or 'fhs'")
 
         dates.append(r.index[i])
-        forecasts.append(est.var)
+        var_f.append(est.var)
+        es_f.append(est.expected_shortfall)
         realised.append(float(r.iloc[i]))
 
     out = pd.DataFrame(
-        {"var_forecast": forecasts, "realised_return": realised}, index=pd.Index(dates, name="date")
+        {"var_forecast": var_f, "es_forecast": es_f, "realised_return": realised},
+        index=pd.Index(dates, name="date"),
     )
     out["exception"] = out["realised_return"] < -out["var_forecast"]
     return out
+
+
+def es_backtest_acerbi_szekely(
+    realised: np.ndarray | pd.Series,
+    var_forecasts: np.ndarray | pd.Series,
+    es_forecasts: np.ndarray | pd.Series,
+    confidence: float = 0.99,
+    n_boot: int = 2000,
+    seed: int = 0,
+) -> BacktestResult:
+    """Acerbi-Szekely (2014) Test 2 for Expected Shortfall calibration.
+
+    Basel III / FRTB made ES the regulatory measure, so the model that has to be
+    validated is the ES, not just the VaR. Kupiec and Christoffersen only look at
+    *whether* the VaR was breached; they are blind to *how far past it* the loss
+    went, which is exactly what ES is supposed to predict.
+
+    The statistic averages, over the exception days, the realised loss divided by
+    the forecast ES:
+
+        Z2 = 1 + mean_over_exceptions( realised_return / ES_forecast )
+
+    (``realised_return`` is negative on a loss and ``ES_forecast`` is a positive
+    loss, so a perfectly calibrated ES gives ``E[Z2] = 0``.) ``Z2 < 0`` means the
+    losses beyond VaR were larger than the ES said — the model understates tail
+    severity. Significance comes from a bootstrap of the null: resample the
+    standardised exceedances and recompute Z2.
+    """
+    r = np.asarray(realised, dtype=float)
+    v = np.asarray(var_forecasts, dtype=float)
+    e = np.asarray(es_forecasts, dtype=float)
+    if not (r.shape == v.shape == e.shape):
+        raise ValueError("realised, var_forecasts and es_forecasts must have equal shape")
+
+    T = r.size
+    alpha = 1.0 - confidence
+    breach = r < -v
+    n_breach = int(breach.sum())
+
+    if n_breach == 0:
+        return BacktestResult(
+            test="Acerbi-Szekely ES (Z2)", statistic=0.0, p_value=1.0,
+            critical_value=0.0, reject=False,
+            detail="no VaR exceptions in the sample — ES cannot be assessed",
+        )
+
+    def _z2(idx: np.ndarray) -> float:
+        rr, vv, ee = r[idx], v[idx], e[idx]
+        contrib = np.where(rr < -vv, rr / ee, 0.0)
+        return 1.0 + contrib.sum() / (idx.size * alpha)
+
+    z2 = _z2(np.arange(T))
+
+    # Bootstrap the sampling distribution of Z2 by resampling whole days. Under a
+    # correctly specified ES the statistic is centred at 0, so the model is
+    # rejected when the distribution sits reliably below 0.
+    rng = np.random.default_rng(seed)
+    boot = np.array([_z2(rng.integers(0, T, size=T)) for _ in range(n_boot)])
+    p_value = float((boot >= 0.0).mean()) if z2 < 0 else 1.0
+    crit = float(np.quantile(boot, 0.05))
+
+    direction = "ES understates tail losses" if z2 < 0 else "ES adequate or conservative"
+    return BacktestResult(
+        test="Acerbi-Szekely ES (Z2)",
+        statistic=float(z2),
+        p_value=p_value,
+        critical_value=crit,
+        reject=bool(z2 < 0 and p_value < 0.05),
+        detail=f"{n_breach} exceptions; {direction} (Z2={z2:+.3f})",
+    )
 
 
 def run_full_backtest(
@@ -327,7 +415,12 @@ def run_full_backtest(
     method: str = "historical",
     distribution: str = "normal",
 ) -> dict[str, object]:
-    """Walk-forward backtest plus every test, returned as one bundle."""
+    """Walk-forward backtest plus every test, returned as one bundle.
+
+    Covers both the VaR tests (Kupiec, Christoffersen, conditional coverage,
+    Basel zone) and the ES test (Acerbi-Szekely), so a model can be judged on the
+    measure Basel actually uses now.
+    """
     bt = rolling_var_backtest(returns, window, confidence, method, distribution)
     exc = bt["exception"].to_numpy()
 
@@ -340,5 +433,11 @@ def run_full_backtest(
         "kupiec": kupiec_pof(exc, confidence),
         "christoffersen": christoffersen_independence(exc),
         "conditional_coverage": conditional_coverage(exc, confidence),
+        "es_test": es_backtest_acerbi_szekely(
+            bt["realised_return"].to_numpy(),
+            bt["var_forecast"].to_numpy(),
+            bt["es_forecast"].to_numpy(),
+            confidence,
+        ),
         "basel": basel_traffic_light(int(exc.sum()), len(bt)),
     }

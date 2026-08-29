@@ -11,8 +11,30 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
-__all__ = ["Portfolio", "log_returns", "simple_returns"]
+__all__ = ["Portfolio", "ledoit_wolf_cov", "log_returns", "simple_returns"]
+
+
+def ledoit_wolf_cov(asset_returns: pd.DataFrame) -> np.ndarray:
+    """Ledoit-Wolf shrinkage estimate of the covariance matrix.
+
+    The sample covariance is unbiased but noisy: with N assets and T
+    observations it has ``N(N+1)/2`` free parameters, and when N is not small
+    relative to T the extreme eigenvalues are badly estimated — which is exactly
+    what a risk model leans on. Shrinkage pulls the sample matrix toward a
+    structured target (here a scaled identity), trading a little bias for a large
+    variance reduction. The shrinkage intensity is chosen analytically to
+    minimise expected error, so there is nothing to tune.
+
+    Falls back to the sample covariance for a single asset (nothing to shrink).
+    """
+    r = asset_returns.to_numpy(dtype=float)
+    if r.shape[1] < 2:
+        return np.atleast_2d(np.cov(r, rowvar=False))
+    from sklearn.covariance import LedoitWolf
+
+    return LedoitWolf().fit(r).covariance_
 
 
 def log_returns(prices: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
@@ -45,6 +67,7 @@ class Portfolio:
     prices: pd.DataFrame
     weights: dict[str, float] | np.ndarray | None = None
     value: float = 1_000_000.0
+    shrink: bool = False  # use Ledoit-Wolf covariance for .cov and downstream risk
     _weights: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -99,8 +122,19 @@ class Portfolio:
 
     @property
     def cov(self) -> np.ndarray:
-        """Sample covariance matrix of asset returns (daily)."""
+        """Covariance matrix of asset returns (daily).
+
+        Ledoit-Wolf shrinkage if ``shrink=True`` was passed, otherwise the plain
+        sample covariance.
+        """
+        if self.shrink:
+            return self.cov_ledoit_wolf
         return np.asarray(self.asset_returns.cov())
+
+    @property
+    def cov_ledoit_wolf(self) -> np.ndarray:
+        """Ledoit-Wolf shrinkage covariance, regardless of the ``shrink`` flag."""
+        return ledoit_wolf_cov(self.asset_returns)
 
     @property
     def volatility(self) -> float:
@@ -126,6 +160,74 @@ class Portfolio:
         if np.isclose(total, 0.0):
             raise ValueError("portfolio variance is zero; cannot decompose")
         return pd.Series(contrib / total, index=self.prices.columns, name="risk_share")
+
+    def component_var(
+        self, confidence: float = 0.99, distribution: str = "normal"
+    ) -> pd.DataFrame:
+        """Decompose the parametric VaR into per-asset contributions.
+
+        Answers the question that always follows the headline number — *which
+        position is the risk actually coming from?* — in VaR units rather than
+        variance units.
+
+        - **marginal**: ``d VaR / d w_i`` — the extra VaR from a marginal increase
+          in position i. Equal to ``(Sigma w)_i / sigma_p * z``.
+        - **component**: ``w_i * marginal_i``. The components sum exactly to the
+          portfolio VaR (for a zero-mean approximation), so ``component_pct`` is a
+          clean risk budget.
+        - **incremental**: ``VaR(book) - VaR(book without i, renormalised)`` — the
+          VaR you would shed by removing the position entirely. Unlike the
+          component version this captures the non-linear diversification effect.
+
+        The mean term is dropped from the marginal/component figures (standard for
+        a 1-day horizon where drift is negligible) but kept in the total and in
+        the incremental figures.
+        """
+        if distribution not in ("normal", "t"):
+            raise ValueError("distribution must be 'normal' or 't'")
+        cov = self.cov
+        w = self._weights
+        sigma_p = float(np.sqrt(w @ cov @ w))
+        if np.isclose(sigma_p, 0.0):
+            raise ValueError("portfolio volatility is zero; cannot decompose")
+
+        r_port = self.returns
+        if distribution == "normal":
+            z = float(stats.norm.ppf(1.0 - confidence))
+        else:
+            nu, _loc, _scale = stats.t.fit(r_port.to_numpy())
+            nu = max(float(nu), 2.05)
+            z = float(stats.t.ppf(1.0 - confidence, nu) / np.sqrt(nu / (nu - 2.0)))
+
+        marginal = -(cov @ w) / sigma_p * z          # positive loss units
+        component = w * marginal
+        total_component = component.sum()
+
+        # Incremental: drop each asset, renormalise the rest, recompute VaR.
+        incremental = np.empty(len(w))
+        mu_p = float(r_port.mean())
+        var_full = -(mu_p + z * sigma_p)
+        for i in range(len(w)):
+            keep = np.arange(len(w)) != i
+            if not keep.any() or np.isclose(w[keep].sum(), 0.0):
+                incremental[i] = var_full
+                continue
+            w_sub = w[keep] / w[keep].sum()
+            cov_sub = cov[np.ix_(keep, keep)]
+            sigma_sub = float(np.sqrt(w_sub @ cov_sub @ w_sub))
+            mu_sub = float((self.asset_returns.iloc[:, keep] @ w_sub).mean())
+            var_sub = -(mu_sub + z * sigma_sub)
+            incremental[i] = var_full - var_sub
+
+        return pd.DataFrame(
+            {
+                "marginal": marginal,
+                "component": component,
+                "component_pct": component / total_component,
+                "incremental": incremental,
+            },
+            index=self.prices.columns,
+        )
 
     def summary(self) -> dict[str, float]:
         r = self.returns

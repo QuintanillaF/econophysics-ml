@@ -189,7 +189,7 @@ async def analizar_activo(req: AnalisisRequest):
     # Precio actual
     precio_actual = dl.get_precio_actual(ticker)
 
-    # Extra crypto: orderbook + ballenas + Fear&Greed
+    # Extra crypto: orderbook + ballenas + Fear&Greed + microestructura de perpetuos
     extra = {}
     if info['es_crypto']:
         if info['binance'] and dl.binance.disponible:
@@ -198,6 +198,9 @@ async def analizar_activo(req: AnalisisRequest):
             extra['presion_orderbook']= 'COMPRADORA' if ob>1.2 else 'VENDEDORA' if ob<0.8 else 'NEUTRAL'
             bw = dl.binance.get_trades_grandes(info['binance'])
             extra['ballenas'] = bw
+            micro = dl.binance.get_microestructura_cripto(info['binance'])
+            if micro.get('disponible'):
+                extra['microestructura'] = micro
         if dl.coingecko.disponible:
             fg = dl.coingecko.fear_and_greed()
             extra['fear_greed'] = fg
@@ -238,6 +241,27 @@ async def get_macro():
     """Datos macro del mercado crypto: Fear&Greed, dominancia BTC, top 10."""
     dl = get_data_layer()
     return dl.get_macro_crypto()
+
+
+@app.get("/api/mercado")
+def get_mercado():
+    """Régimen macro / cross-asset tradicional.
+
+    Curva de tasas, VIX term structure, spread de crédito (proxy), dólar y un
+    score de régimen risk-on / risk-off. Distinto de /api/macro, que es
+    sentimiento cripto. Los datos macro cambian a diario, así que se cachean
+    con TTL largo.
+    """
+    key = "mercado_macro"
+    if cache_ok(key):
+        return _cache[key]
+    from analisis_macro import AnalisisMacro
+
+    resultado = AnalisisMacro().cargar().to_dict()
+    if not resultado.get("disponible"):
+        raise HTTPException(503, "No se pudieron descargar los datos macro (yfinance)")
+    _cache[key] = resultado
+    return resultado
 
 
 @app.get("/api/señales")
@@ -380,12 +404,51 @@ def analizar_var(req: VaRRequest):
         for idx, row in comp.iterrows()
     ]
 
-    # ── 2. Backtest walk-forward + tests supervisores ────────────────────
+    # ── componente VaR: ¿de dónde viene el riesgo? ──────────────────────
+    try:
+        cv = book.component_var(req.confianza, distribution="normal")
+        componentes = [
+            {
+                'activo':         idx,
+                'marginal_pct':   round(float(r['marginal']) * 100, 3),
+                'componente_pct': round(float(r['component']) * 100, 3),
+                'share':          round(float(r['component_pct']) * 100, 1),
+            }
+            for idx, r in cv.iterrows()
+        ]
+    except ValueError:
+        componentes = []
+
+    # ── modelo de factores (solo equity) ───────────────────────────────
+    factor_model = None
+    if not normalizar_ticker(ticker)['es_crypto']:
+        from varengine import fit_factor_model
+        for src in ('fama_french', 'style'):
+            try:
+                fm = fit_factor_model(retornos, source=src)
+                factor_model = {
+                    'source':       src,
+                    'r_squared':    round(fm.r_squared, 3),
+                    'alpha_anual_pct': round(fm.alpha_annual * 100, 2),
+                    'alpha_tstat':  round(fm.alpha_tstat, 2),
+                    'idiosincratico_pct': round(fm.idiosyncratic_share * 100, 1),
+                    'betas': [
+                        {'factor': f, 'beta': round(float(fm.betas[f]), 3),
+                         'tstat': round(float(fm.tstats[f]), 2),
+                         'riesgo_pct': round(float(fm.risk_contribution.get(f, 0)) * 100, 1)}
+                        for f in fm.betas.index
+                    ],
+                }
+                break
+            except Exception:
+                continue
+
+    # ── 2. Backtest walk-forward + tests supervisores (VaR y ES) ─────────
     def _backtest(metodo: str, dist: str, etiqueta: str) -> dict:
         out = run_full_backtest(retornos, window=req.ventana, confidence=req.confianza,
                                 method=metodo, distribution=dist)
-        k, c, cc, b = (out['kupiec'], out['christoffersen'],
-                       out['conditional_coverage'], out['basel'])
+        k, c, cc, es, b = (out['kupiec'], out['christoffersen'],
+                           out['conditional_coverage'], out['es_test'], out['basel'])
         return {
             'modelo':         etiqueta,
             'n_dias':         out['n_days'],
@@ -404,6 +467,10 @@ def analizar_var(req: VaRRequest):
                 'lr': round(cc.statistic, 3), 'p_value': round(cc.p_value, 4),
                 'rechaza': bool(cc.reject),
             },
+            'es_test': {
+                'z2': round(es.statistic, 3), 'p_value': round(es.p_value, 4),
+                'rechaza': bool(es.reject), 'detalle': es.detail,
+            },
             'basel': {
                 'zona': b['zone'],
                 'multiplicador_capital': b['capital_multiplier'],
@@ -415,6 +482,7 @@ def analizar_var(req: VaRRequest):
     backtests = [
         _backtest('historical', 'normal', 'Simulación histórica'),
         _backtest('parametric', 'normal', 'Paramétrico — normal'),
+        _backtest('fhs', 'ewma', 'Filtered historical (EWMA)'),
     ]
     if req.incluir_t:
         backtests.append(_backtest('parametric', 't', 'Paramétrico — Student-t'))
@@ -432,6 +500,8 @@ def analizar_var(req: VaRRequest):
         'n_observaciones':  len(retornos),
         'es_975_pct':       round(expected_shortfall(retornos, 0.975) * 100, 3),
         'metodos':          metodos,
+        'componentes':      componentes,
+        'factor_model':     factor_model,
         'backtests':        backtests,
         'resumen': {
             'spread_metodos_pct': round((comp['VaR'].max() / comp['VaR'].min() - 1) * 100, 1),

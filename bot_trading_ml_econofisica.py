@@ -5,6 +5,7 @@
 ╚══════════════════════════════════════════════════════════════════╝
 INSTALACIÓN: pip install yfinance scikit-learn numpy scipy pandas matplotlib requests
 """
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,6 +16,12 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
 from data_layer import get_data_layer, normalizar_ticker
+from varengine import deflated_sharpe_ratio, probability_of_backtest_overfitting
+
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except (AttributeError, ValueError):
+    pass
 
 try:
     import xgboost as xgb; XGBOOST = True
@@ -91,13 +98,17 @@ class ModeloTrading:
             clf=GradientBoostingClassifier(n_estimators=150,max_depth=3,learning_rate=0.05,subsample=0.8,random_state=42)
         self.modelo=CalibratedClassifierCV(clf,cv=3,method='sigmoid')
 
-    def walk_forward(self, X, y, n_train=252, step=21):
+    def walk_forward(self, X, y, n_train=252, step=21, purge=0):
+        # `purge` drops the last `purge` training rows before each test block: with
+        # triple-barrier labels a training label realised over the next N days
+        # overlaps the test period and leaks. Set purge = label horizon.
         self.feature_names=list(X.columns); n=len(X)
         preds=pd.Series(0,index=X.index,dtype=int)
         probs=pd.DataFrame(0.0,index=X.index,columns=[-1,0,1])
-        print(f"   Walk-forward: {(n-n_train)//step} períodos...")
+        print(f"   Walk-forward: {(n-n_train)//step} períodos (purge={purge})...")
         for t in range(n_train,n,step):
-            Xtr=X.iloc[:t]; ytr=y.iloc[:t]; te=min(t+step,n); Xte=X.iloc[t:te]
+            cut=max(1, t-purge)
+            Xtr=X.iloc[:cut]; ytr=y.iloc[:cut]; te=min(t+step,n); Xte=X.iloc[t:te]
             mask=~(Xtr.isna().any(axis=1)|ytr.isna()); Xtr,ytr=Xtr[mask],ytr[mask]
             if len(ytr.unique())<2 or len(Xtr)<50: continue
             try:
@@ -189,12 +200,27 @@ class SistemaTrading:
 
         print("\n[4/5] Walk-forward validation...")
         idx=features.index.intersection(labels.index); X=features.loc[idx]; y=labels.loc[idx]
-        señales=self.modelo.walk_forward(X,y)
+        señales=self.modelo.walk_forward(X,y,purge=self.horizonte)
 
         print("\n[5/5] Backtest...")
         self.historial=self.backtest.correr(retornos,señales)
         self.metricas=self.backtest.calcular_metricas(self.historial,retornos)
+        self._deflacionar_sharpe()
         self._imprimir(ticker_d); return self.metricas
+
+    def _deflacionar_sharpe(self, n_trials=20):
+        """Deflated Sharpe Ratio de la curva de estrategia.
+
+        El Sharpe de un backtest está inflado por todo lo que se probó y descartó.
+        El DSR compara el Sharpe observado contra el que se esperaría por azar tras
+        `n_trials` configuraciones, ajustando por asimetría y curtosis. DSR < 0.5 =
+        más probable que la habilidad sea ruido de selección.
+        """
+        r = self.historial['retorno'].dropna()
+        try:
+            self.dsr = deflated_sharpe_ratio(r, n_trials=n_trials)
+        except ValueError:
+            self.dsr = None
 
     def _imprimir(self, ticker):
         m=self.metricas; sep="─"*50
@@ -210,7 +236,69 @@ class SistemaTrading:
         print(f"  Sharpe:           {m['sharpe_ratio']:>8.3f}")
         print(f"  Max Drawdown:     {m['max_drawdown']:>8.1f}%")
         print(f"  N Operaciones:    {m['n_operaciones']:>8}")
+        if getattr(self, 'dsr', None):
+            d = self.dsr
+            print(sep)
+            print(f"  Deflated Sharpe:  {d['dsr']:>8.2f}   (PSR {d['psr']:.2f}, "
+                  f"umbral por azar {d['sr_threshold']:.2f} con {d['n_trials']} pruebas)")
+            print(f"  Veredicto:        {d['verdict']:>8}   "
+                  f"(skew {d['skew']:+.2f}, kurtosis {d['kurtosis']:.2f})")
         print(f"{'═'*55}\n")
+
+    def evaluar_robustez(self, grid=None, verbose=True):
+        """Corre una grilla de configuraciones y calcula la Probability of
+        Backtest Overfitting (PBO) por CSCV.
+
+        Si al variar umbral de confianza / horizonte / Kelly el "mejor" en la
+        primera mitad de la muestra deja de ser bueno en la segunda, la búsqueda
+        de parámetros está sobreajustando. PBO ≈ 0.5 = la selección no aporta
+        información; PBO alto = el backtest miente.
+
+        Es lento (una corrida walk-forward por combinación). No se ejecuta por
+        defecto.
+        """
+        if grid is None:
+            grid = [
+                (u, h, k)
+                for u in (0.52, 0.55, 0.60)
+                for h in (3, 5, 10)
+                for k in (0.15, 0.25)
+            ]
+        pnl_cols, etiquetas = [], []
+        base_idx = None
+        for (u, h, k) in grid:
+            s = SistemaTrading(self.ticker, periodo=self.periodo,
+                               modelo_tipo=self.modelo.tipo, horizonte_label=h,
+                               umbral_confianza=u, capital_inicial=self.capital_0)
+            s.backtest.kelly = k
+            try:
+                s.correr(verbose=False)
+            except Exception:
+                continue
+            r = s.historial['retorno'].dropna()
+            if base_idx is None:
+                base_idx = r.index
+            pnl_cols.append(r.reindex(base_idx).fillna(0.0).to_numpy())
+            etiquetas.append(f"u{u}_h{h}_k{k}")
+
+        if len(pnl_cols) < 4:
+            print("No hay suficientes configuraciones válidas para PBO.")
+            return None
+
+        M = np.column_stack(pnl_cols)
+        n_splits = 10 if M.shape[0] >= 20 else 4
+        pbo = probability_of_backtest_overfitting(M, n_splits=n_splits)
+        self.pbo = pbo
+        if verbose:
+            print(f"\n{'═'*55}\n  ROBUSTEZ — {len(etiquetas)} configuraciones\n{'═'*55}")
+            print(f"  PBO (probability of backtest overfitting): {pbo['pbo']:.1%}")
+            print(f"  logit mediano OOS del mejor IS: {pbo['median_logit']:+.2f}")
+            print(f"  {pbo['n_combinations']} particiones IS/OOS evaluadas")
+            lectura = ("la selección de parámetros NO sobreajusta" if pbo['pbo'] < 0.3
+                       else "sobreajuste moderado" if pbo['pbo'] < 0.5
+                       else "el backtest está sobreajustado — el 'mejor' no generaliza")
+            print(f"  → {lectura}\n{'═'*55}\n")
+        return pbo
 
     def graficar(self):
         if self.historial is None: return

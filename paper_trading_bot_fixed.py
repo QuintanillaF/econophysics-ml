@@ -496,16 +496,16 @@ class PaperTradingBot:
         # Inicializar agentes si es necesario
         if not self.sistema_agentes:
             self._init_agentes()
-        n_pos=len(self.alpaca.get_posiciones())
-      try:
-        balances=self.binance.get_cuenta()
-        n_pos += sum(1 for a, c in balances.items()
-                     if a != 'USDT' and c > 0.001)
-      except Exception:
-          pass
+        n_pos = len(self.alpaca.get_posiciones())
+        try:
+            balances = self.binance.get_cuenta()
+            n_pos += sum(1 for a, c in balances.items()
+                         if a != 'USDT' and c > 0.001)
+        except Exception:
+            pass
         if hasattr(self.sistema_agentes, 'actualizar_posiciones'):
-          self.sistema_agentes.actualizar_posiciones(n_pos)
-          logger.info(f" Posiciones abiertas: {n_pos}")
+            self.sistema_agentes.actualizar_posiciones(n_pos)
+            logger.info(f" Posiciones abiertas: {n_pos}")
 
         # Obtener señales de los agentes
         logger.info(" Analizando activos...")

@@ -24,6 +24,8 @@ schedule>=1.2
 
 # ── Opcionales ─────────────────────────────────────────────────────
 # xgboost>=2.0        # modelo alternativo en bot_trading_ml_econofisica.py
+# arch>=6.0           # el GARCH de varengine es MLE propio; arch da una
+#                     # estimación más robusta si se quiere comparar
 
 # ── Desarrollo / tests ─────────────────────────────────────────────
 # pytest>=7.4
