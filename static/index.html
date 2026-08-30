@@ -10,17 +10,17 @@
 <style>
   /* ── Variables ─────────────────────────────────────────── */
   :root {
-    --bg:        #080c10;
-    --bg2:       #0d1219;
-    --bg3:       #131a23;
-    --border:    #1e2a38;
-    --text:      #c9d5e0;
-    --text2:     #5a7a99;
-    --blue:      #4d9fff;
-    --green:     #2ecc71;
-    --red:       #e74c3c;
-    --yellow:    #f0b429;
-    --cyan:      #00d4ff;
+    --bg: #080c10;
+    --bg2: #0d1219;
+    --bg3: #131a23;
+    --border: #1e2a38;
+    --text: #c9d5e0;
+    --text2: #5a7a99;
+    --blue: #4d9fff;
+    --green: #2ecc71;
+    --red: #e74c3c;
+    --yellow: #f0b429;
+    --cyan: #00d4ff;
     --font-mono: 'JetBrains Mono', monospace;
     --font-disp: 'Syne', sans-serif;
   }
@@ -94,7 +94,7 @@
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
+    50% { opacity: 0.3; }
   }
 
   /* ── Layout ─────────────────────────────────────────────── */
@@ -142,9 +142,9 @@
     white-space: nowrap;
   }
 
-  .btn:hover   { opacity: 0.85; }
-  .btn:active  { transform: scale(0.97); }
-  .btn.ghost   {
+  .btn:hover { opacity: 0.85; }
+  .btn:active { transform: scale(0.97); }
+  .btn.ghost {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text);
@@ -176,9 +176,9 @@
   .signal-chip:hover { border-color: var(--cyan); background: var(--bg2); }
 
   .chip-ticker { font-weight: 700; font-size: 12px; color: white; }
-  .chip-price  { font-size: 11px; color: var(--text2); }
+  .chip-price { font-size: 11px; color: var(--text2); }
   .chip-signal { font-size: 14px; }
-  .chip-hurst  { font-size: 10px; color: var(--text2); }
+  .chip-hurst { font-size: 10px; color: var(--text2); }
 
   /* ── Grid principal ─────────────────────────────────────── */
   .main-grid {
@@ -250,8 +250,8 @@
   }
 
   .stat-value.green { color: var(--green); }
-  .stat-value.red   { color: var(--red); }
-  .stat-value.blue  { color: var(--blue); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.blue { color: var(--blue); }
   .stat-value.yellow{ color: var(--yellow); }
 
   .stat-sub {
@@ -274,10 +274,10 @@
     margin-bottom: 8px;
   }
 
-  .signal-action.buy    { color: var(--green); }
-  .signal-action.sell   { color: var(--red); }
-  .signal-action.hold   { color: var(--text2); }
-  .signal-action.wait   { color: var(--yellow); }
+  .signal-action.buy { color: var(--green); }
+  .signal-action.sell { color: var(--red); }
+  .signal-action.hold { color: var(--text2); }
+  .signal-action.wait { color: var(--yellow); }
 
   .signal-prob {
     font-size: 13px;
@@ -532,8 +532,8 @@
     letter-spacing: 0.5px;
   }
 
-  .badge.buy  { background: rgba(46,204,113,0.15); color: var(--green); }
-  .badge.sell { background: rgba(231,76,60,0.15);  color: var(--red); }
+  .badge.buy { background: rgba(46,204,113,0.15); color: var(--green); }
+  .badge.sell { background: rgba(231,76,60,0.15); color: var(--red); }
   .badge.hold { background: rgba(90,122,153,0.15); color: var(--text2); }
 
   /* ── Regimen badge ───────────────────────────────────────── */
@@ -548,7 +548,7 @@
     margin-top: 8px;
   }
 
-  .regimen-badge.calma  {
+  .regimen-badge.calma {
     background: rgba(46,204,113,0.1);
     border: 1px solid rgba(46,204,113,0.3);
     color: var(--green);
@@ -592,9 +592,9 @@
     font-weight: 700;
     letter-spacing: 0.5px;
   }
-  .zona-badge.green  { background: rgba(46,204,113,0.14); color: var(--green);  border: 1px solid rgba(46,204,113,0.3); }
+  .zona-badge.green { background: rgba(46,204,113,0.14); color: var(--green); border: 1px solid rgba(46,204,113,0.3); }
   .zona-badge.yellow { background: rgba(240,180,41,0.14); color: var(--yellow); border: 1px solid rgba(240,180,41,0.3); }
-  .zona-badge.red    { background: rgba(231,76,60,0.14);  color: var(--red);    border: 1px solid rgba(231,76,60,0.3); }
+  .zona-badge.red { background: rgba(231,76,60,0.14); color: var(--red); border: 1px solid rgba(231,76,60,0.3); }
 
   .var-bt-row {
     display: grid;
@@ -609,7 +609,7 @@
     .var-bt-row { grid-template-columns: 1fr 1fr; }
   }
   .var-bt-row .modelo { font-weight: 600; }
-  .var-verdict.ok   { color: var(--green); }
+  .var-verdict.ok { color: var(--green); }
   .var-verdict.fail { color: var(--red); }
 
   /* ── Loading ─────────────────────────────────────────────── */
@@ -643,6 +643,56 @@
     font-size: 12px;
   }
 
+  /* ── Layout con sidebar ─────────────────────────────────── */
+  .app { display: flex; align-items: flex-start; }
+
+  .sidebar {
+    width: 190px;
+    flex-shrink: 0;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 16px 10px;
+    position: sticky;
+    top: 61px;
+    height: calc(100vh - 61px);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .nav-item {
+    background: none;
+    border: none;
+    border-left: 2px solid transparent;
+    color: var(--text2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 0 6px 6px 0;
+    cursor: pointer;
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--bg3); color: var(--cyan); border-left-color: var(--cyan); }
+  .nav-sep { height: 1px; background: var(--border); margin: 8px 4px; }
+  .nav-hint { font-size: 9px; color: var(--text2); padding: 8px 12px; line-height: 1.5; }
+
+  .content { flex: 1; min-width: 0; padding: 22px 28px; max-width: 1500px; }
+
+  .view[hidden] { display: none; }
+  .view-title {
+    font-family: var(--font-disp);
+    font-size: 15px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 4px;
+  }
+  .view-sub { font-size: 11px; color: var(--text2); margin-bottom: 18px; }
+
   /* ── Responsive ──────────────────────────────────────────── */
   @media (max-width: 1100px) {
     .main-grid { grid-template-columns: 1fr 1fr; }
@@ -650,10 +700,21 @@
     .portfolio-grid { grid-template-columns: 1fr; }
   }
 
+  @media (max-width: 800px) {
+    .app { flex-direction: column; }
+    .sidebar {
+      width: 100%; height: auto; position: static;
+      flex-direction: row; overflow-x: auto; padding: 8px;
+    }
+    .nav-item { border-left: none; border-bottom: 2px solid transparent; white-space: nowrap; border-radius: 6px; }
+    .nav-item.active { border-left: none; border-bottom-color: var(--cyan); }
+    .nav-sep, .nav-hint { display: none; }
+    .content { padding: 14px; }
+  }
+
   @media (max-width: 700px) {
     .main-grid { grid-template-columns: 1fr; }
     .chart-card { grid-column: span 1; }
-    .container { padding: 14px; }
   }
 </style>
 </head>
@@ -662,19 +723,35 @@
 <!-- ── HEADER ────────────────────────────────────────────── -->
 <header>
   <div class="logo">QUANT<span>EDGE</span></div>
-  <div class="header-status">
-    <span><span class="dot"></span>SERVIDOR ACTIVO</span>
+  <div class="header-status"><span><span class="dot"></span>SERVIDOR ACTIVO</span>
     <span id="last-update">—</span>
   </div>
 </header>
 
-<div class="container">
+<div class="app">
 
-  <!-- ── BARRA DE BÚSQUEDA ─────────────────────────────── -->
+  <!-- ── SIDEBAR ────────────────────────────────────────── -->
+  <nav class="sidebar" id="sidebar">
+    <button class="nav-item active" data-view="resumen"><span>Resumen</span></button>
+    <button class="nav-item" data-view="riesgo"><span>Riesgo (VaR)</span></button>
+    <button class="nav-item" data-view="stress"><span>Stress testing</span></button>
+    <button class="nav-item" data-view="burbujas"><span>Burbujas (LPPLS)</span></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item" data-view="macro"><span>Macro</span></button>
+    <button class="nav-item" data-view="agentes"><span>Agentes</span></button>
+    <button class="nav-item" data-view="portfolio"><span>Portfolio</span></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item" data-view="historial"><span>Historial</span></button>
+    <div class="nav-hint">Riesgo y Burbujas usan el ticker de la barra de arriba.</div>
+  </nav>
+
+  <div class="content">
+
+  <!-- ── BARRA DE BÚSQUEDA (compartida) ────────────────── -->
   <div class="search-section">
     <input class="search-input" type="text" id="ticker-input"
            placeholder="Ticker: AAPL, BTC-USD, NVDA..."
-           onkeydown="if(event.key==='Enter') analizarTicker()">
+           onkeydown="if(event.key==='Enter') analizarActual()">
     <select class="search-input" id="periodo-select" style="max-width:120px">
       <option value="3mo">3 meses</option>
       <option value="6mo">6 meses</option>
@@ -682,20 +759,118 @@
       <option value="2y">2 años</option>
       <option value="5y">5 años</option>
     </select>
-    <button class="btn" onclick="analizarTicker()">ANALIZAR</button>
+    <button class="btn" onclick="analizarActual()">ANALIZAR</button>
     <button class="btn ghost" onclick="entrenarModelo()">ENTRENAR ML</button>
   </div>
 
-  <!-- ── SEÑALES RÁPIDAS ───────────────────────────────── -->
+  <!-- ── BARRA DE SEÑALES (compartida, 20 acciones + 20 cripto) ── -->
   <div class="signals-bar" id="signals-bar">
-    <div class="loading"><div class="spinner"></div> Cargando señales...</div>
+    <div class="loading"><div class="spinner"></div> Cargando señales de la watchlist...</div>
   </div>
 
-  <!-- ── MACRO / RÉGIMEN DE MERCADO ────────────────────── -->
-  <div class="portfolio-section" style="margin-top:16px">
-    <div class="section-title" style="justify-content:space-between">
-      <span><span>🌐</span> MACRO / RÉGIMEN DE MERCADO</span>
-      <button class="btn ghost" style="padding:4px 10px;font-size:10px"
+  <!-- ══════ VISTA: RESUMEN ══════ -->
+  <section class="view" id="view-resumen">
+    <div class="main-grid" id="main-grid">
+      <div class="card" id="card-stats">
+        <div class="card-title">ESTADÍSTICAS</div>
+        <div class="loading"><div class="spinner"></div> Seleccioná un ticker</div>
+      </div>
+      <div class="card" id="card-señal">
+        <div class="card-title">SEÑAL ML</div>
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div class="card" id="card-hurst">
+        <div class="card-title">EXPONENTE DE HURST</div>
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div class="card chart-card" id="card-chart">
+        <div class="card-title">GRÁFICO</div>
+        <div class="chart-tabs">
+          <button class="tab active" onclick="cambiarChart('precio',this)">Precio</button>
+          <button class="tab" onclick="cambiarChart('vol',this)">Volatilidad</button>
+          <button class="tab" onclick="cambiarChart('hurst',this)">Hurst Rolling</button>
+        </div>
+        <div class="chart-container">
+          <canvas id="main-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════ VISTA: RIESGO (VaR) ══════ -->
+  <section class="view" id="view-riesgo" hidden>
+    <div class="view-title">Value at Risk &amp; backtesting regulatorio</div>
+    <div class="view-sub">
+      Usa el ticker de la barra de arriba (recomendado: período 2y o 5y).
+      Cinco métodos de VaR, Expected Shortfall, VaR componente, modelo de factores,
+      y un backtest walk-forward con Kupiec / Christoffersen / test de ES / semáforo
+      de Basilea. Puede tardar ~30-60&nbsp;s la primera vez.
+    </div>
+    <div style="margin-bottom:14px">
+      <button class="btn" onclick="analizarVaR()">CALCULAR VaR / BACKTEST</button>
+    </div>
+    <div class="card">
+      <div id="var-content">
+        <div style="color:var(--text2);font-size:12px;padding:12px">
+          Elegí un ticker arriba y presioná CALCULAR.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════ VISTA: STRESS TESTING ══════ -->
+  <section class="view" id="view-stress" hidden>
+    <div class="view-title">Stress testing</div>
+    <div class="view-sub">
+      Aplica crisis históricas (2008, COVID, Terra/UST, FTX…) y shocks hipotéticos
+      a la cartera de hoy. La cartera se mapea a factores de riesgo por regresión;
+      cuando hay historia se usa el retorno real de cada activo. La primera corrida
+      baja historia de factores desde 2007 (~15&nbsp;s).
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <input class="search-input" type="text" id="stress-input"
+             value="AAPL,MSFT,NVDA,BTC-USD"
+             style="max-width:320px;font-size:11px"
+             onkeydown="if(event.key==='Enter') analizarStress()">
+      <button class="btn" onclick="analizarStress()">CORRER STRESS</button>
+    </div>
+    <div class="card">
+      <div id="stress-content">
+        <div style="color:var(--text2);font-size:12px;padding:12px">
+          Escribí los activos de la cartera (pesos iguales) y presioná CORRER STRESS.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════ VISTA: BURBUJAS (LPPLS) ══════ -->
+  <section class="view" id="view-burbujas" hidden>
+    <div class="view-title">Detección de burbujas — LPPLS (Sornette)</div>
+    <div class="view-sub">
+      Ajusta el modelo Log-Periodic Power Law Singularity: una burbuja es un
+      crecimiento super-exponencial con oscilaciones que se aceleran hacia un
+      tiempo crítico <code>tc</code>. Usa el ticker de la barra de arriba. El
+      ajuste (evolución diferencial) tarda ~15-30&nbsp;s.
+    </div>
+    <div style="margin-bottom:14px">
+      <button class="btn" onclick="detectarBurbuja()">DETECTAR BURBUJA</button>
+    </div>
+    <div class="card">
+      <div id="burbuja-content">
+        <div style="color:var(--text2);font-size:12px;padding:12px">
+          Elegí un ticker arriba y presioná DETECTAR.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════ VISTA: MACRO ══════ -->
+  <section class="view" id="view-macro" hidden>
+    <div class="view-title">Macro / régimen de mercado</div>
+    <div class="view-sub">
+      Curva de tasas, VIX term structure, spread de crédito (proxy), dólar y un
+      score de régimen risk-on / risk-off.
+      <button class="btn ghost" style="padding:2px 8px;font-size:10px;margin-left:8px"
               onclick="cargarMacro()">REFRESCAR</button>
     </div>
     <div class="card">
@@ -703,50 +878,36 @@
         <div class="loading"><div class="spinner"></div> Cargando datos macro...</div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- ── GRID PRINCIPAL ───────────────────────────────── -->
-  <div class="main-grid" id="main-grid">
-
-    <!-- Stats -->
-    <div class="card" id="card-stats">
-      <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS</div>
-      <div class="loading"><div class="spinner"></div> Seleccioná un ticker</div>
+  <!-- ══════ VISTA: AGENTES ══════ -->
+  <section class="view" id="view-agentes" hidden>
+    <div class="view-title">Debate de agentes — COMPRAR / VENDER / ESPERAR</div>
+    <div class="view-sub">
+      Bull, Bear y Risk Manager debaten cada activo y sale una decisión con tamaño
+      de posición por Kelly. Hasta 10 tickers (el análisis es real por activo, ~3-5&nbsp;s
+      c/u). El mismo debate corre en <code>python sistema_agentes.py</code>.
     </div>
-
-    <!-- Señal ML -->
-    <div class="card" id="card-señal">
-      <div class="card-title"><span class="icon">🤖</span>SEÑAL ML</div>
-      <div class="loading"><div class="spinner"></div></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <input class="search-input" type="text" id="agentes-input"
+             value="AAPL,NVDA,MSFT,TSLA,AMZN,META,BTC-USD,ETH-USD,SOL-USD,BNB-USD"
+             style="max-width:520px;font-size:11px"
+             onkeydown="if(event.key==='Enter') cargarAgentes()">
+      <button class="btn" onclick="cargarAgentes()">ANALIZAR</button>
     </div>
-
-    <!-- Hurst -->
-    <div class="card" id="card-hurst">
-      <div class="card-title"><span class="icon">🌊</span>EXPONENTE DE HURST</div>
-      <div class="loading"><div class="spinner"></div></div>
-    </div>
-
-    <!-- Gráfico -->
-    <div class="card chart-card" id="card-chart">
-      <div class="card-title"><span class="icon">📈</span>GRÁFICO</div>
-      <div class="chart-tabs">
-        <button class="tab active" onclick="cambiarChart('precio',this)">Precio</button>
-        <button class="tab" onclick="cambiarChart('vol',this)">Volatilidad</button>
-        <button class="tab" onclick="cambiarChart('hurst',this)">Hurst Rolling</button>
-      </div>
-      <div class="chart-container">
-        <canvas id="main-chart"></canvas>
+    <div class="card">
+      <div id="agentes-content">
+        <div style="color:var(--text2);font-size:12px;padding:12px">
+          Escribí los tickers y presioná ANALIZAR.
+        </div>
       </div>
     </div>
+  </section>
 
-  </div>
-
-  <!-- ── PORTFOLIO ─────────────────────────────────────── -->
-  <div class="portfolio-section">
-    <div class="section-title">
-      <span>⚖️</span> OPTIMIZACIÓN DE PORTFOLIO
-    </div>
-
+  <!-- ══════ VISTA: PORTFOLIO ══════ -->
+  <section class="view" id="view-portfolio" hidden>
+    <div class="view-title">Optimización de portfolio</div>
+    <div class="view-sub">Optimización por entropía máxima + matriz de correlaciones.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
       <input class="search-input" type="text" id="port-ticker-input"
              placeholder="Agregar ticker..."
@@ -755,50 +916,27 @@
       <button class="btn ghost" onclick="agregarTickerPortfolio()">+ AGREGAR</button>
       <button class="btn" onclick="optimizarPortfolio()">OPTIMIZAR</button>
     </div>
-
     <div class="ticker-input-row" id="portfolio-tickers"></div>
-
     <div class="portfolio-grid">
       <div class="card" id="card-pesos">
-        <div class="card-title"><span class="icon">📐</span>PESOS ÓPTIMOS</div>
+        <div class="card-title">PESOS ÓPTIMOS</div>
         <div id="pesos-content" style="color:var(--text2);font-size:12px">
           Agregá activos y presioná OPTIMIZAR
         </div>
       </div>
       <div class="card" id="card-corr">
-        <div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
-        <div id="corr-content" style="color:var(--text2);font-size:12px">
-          —
-        </div>
+        <div class="card-title">CORRELACIONES</div>
+        <div id="corr-content" style="color:var(--text2);font-size:12px">—</div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- ── VALUE AT RISK ─────────────────────────────────── -->
-  <div class="portfolio-section" style="margin-top:24px">
-    <div class="section-title" style="justify-content:space-between">
-      <span><span>🛡️</span> RIESGO — VALUE AT RISK &amp; BACKTESTING REGULATORIO</span>
-      <button class="btn" style="padding:4px 12px;font-size:10px"
-              onclick="analizarVaR()">CALCULAR VaR / BACKTEST</button>
-    </div>
-    <div class="card">
-      <div id="var-content">
-        <div style="color:var(--text2);font-size:12px;padding:12px">
-          Usa el ticker y el período de la barra de búsqueda (recomendado: 2y o 5y).
-          Corre los tres métodos de VaR, el Expected Shortfall y un backtest
-          walk-forward con los tests de Kupiec, Christoffersen y el semáforo de Basilea.
-          El método Student-t ajusta ν en cada ventana, así que puede tardar
-          ~30&nbsp;s la primera vez.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── TRADES LOG ─────────────────────────────────────── -->
-  <div class="portfolio-section" style="margin-top:24px">
-    <div class="section-title" style="justify-content:space-between">
-      <span><span>📋</span> HISTORIAL DE SEÑALES</span>
-      <button class="btn ghost" style="padding:4px 10px;font-size:10px"
+  <!-- ══════ VISTA: HISTORIAL ══════ -->
+  <section class="view" id="view-historial" hidden>
+    <div class="view-title">Historial de señales</div>
+    <div class="view-sub">
+      Trades registrados por el bot de paper trading (<code>trades_log.json</code>).
+      <button class="btn ghost" style="padding:2px 8px;font-size:10px;margin-left:8px"
               onclick="cargarTrades()">REFRESCAR</button>
     </div>
     <div class="card">
@@ -806,20 +944,49 @@
         <div class="loading"><div class="spinner"></div> Cargando...</div>
       </div>
     </div>
-  </div>
+  </section>
 
-</div>
+  </div><!-- /content -->
+</div><!-- /app -->
 
 <!-- ── JAVASCRIPT ─────────────────────────────────────────── -->
 <script>
 const API = 'http://localhost:8000/api'
 let chartInstance = null
-let chartData     = null
-let chartMode     = 'precio'
+let bubbleChart = null
+let chartData = null
+let chartMode = 'precio'
 let portfolioTickers = ['AAPL', 'NVDA', 'BTC-USD', 'ETH-USD']
+let vistaActual = 'resumen'
+const vistasCargadas = new Set()
 
 // ── Utilidades ──────────────────────────────────────────────
 const $ = id => document.getElementById(id)
+
+// ── Navegación entre vistas ─────────────────────────────────
+function mostrarVista(nombre) {
+  vistaActual = nombre
+  document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + nombre })
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.toggle('active', n.dataset.view === nombre)
+  })
+  // Carga perezosa: la primera vez que se abre una vista
+  if (!vistasCargadas.has(nombre)) {
+    vistasCargadas.add(nombre)
+    if (nombre === 'macro') cargarMacro()
+    if (nombre === 'historial') cargarTrades()
+  }
+  // Chart.js necesita re-medir si se renderizó en un contenedor oculto
+  if (nombre === 'resumen' && chartInstance) setTimeout(() => chartInstance.resize(), 30)
+  if (nombre === 'burbujas' && bubbleChart) setTimeout(() => bubbleChart.resize(), 30)
+}
+
+// El botón ANALIZAR de la barra superior actúa según la vista activa
+function analizarActual() {
+  if (vistaActual === 'riesgo') analizarVaR()
+  else if (vistaActual === 'burbujas') detectarBurbuja()
+  else { mostrarVista('resumen'); analizarTicker() }
+}
 
 function colorClass(val, thresholds) {
   if (val >= thresholds[1]) return 'green'
@@ -834,23 +1001,24 @@ function formatPct(v) {
 
 // ── Señales rápidas ─────────────────────────────────────────
 async function cargarSenales() {
-  const tickers = 'AAPL,NVDA,TSLA,SPY,BTC-USD,ETH-USD,SOL-USD'
   try {
-    const r   = await fetch(`${API}/señales?tickers=${tickers}`)
+    // sin ?tickers → el server usa la watchlist completa (20 acciones + 20 cripto)
+    const r = await fetch(`${API}/señales`)
     const data = await r.json()
-    const bar  = $('signals-bar')
+    const bar = $('signals-bar')
     bar.innerHTML = ''
 
     for (const s of data.señales) {
       const div = document.createElement('div')
       div.className = 'signal-chip'
-      div.onclick   = () => {
+      div.onclick = () => {
         $('ticker-input').value = s.ticker
+        mostrarVista('resumen')
         analizarTicker()
       }
       const señalColor = s.señal === '↑' ? 'var(--green)' :
                          s.señal === '↓' ? 'var(--red)' : 'var(--text2)'
-      const retColor   = s.ret_1m >= 0 ? 'var(--green)' : 'var(--red)'
+      const retColor = s.ret_1m >= 0 ? 'var(--green)' : 'var(--red)'
 
       div.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -869,32 +1037,32 @@ async function cargarSenales() {
 
   } catch (e) {
     $('signals-bar').innerHTML =
-      '<div style="color:var(--text2);font-size:11px;padding:8px">⚠️ Servidor no disponible — corré python server.py</div>'
+      '<div style="color:var(--text2);font-size:11px;padding:8px">Servidor no disponible — corré python server.py</div>'
   }
 }
 
 // ── Analizar ticker ─────────────────────────────────────────
 async function analizarTicker() {
-  const ticker  = $('ticker-input').value.trim().toUpperCase()
+  const ticker = $('ticker-input').value.trim().toUpperCase()
   const periodo = $('periodo-select').value
   if (!ticker) return
 
   // Loading state
   $('card-stats').innerHTML = `
-    <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS — ${ticker}</div>
+    <div class="card-title">ESTADÍSTICAS — ${ticker}</div>
     <div class="loading"><div class="spinner"></div> Analizando...</div>`
   $('card-señal').innerHTML = `
-    <div class="card-title"><span class="icon">🤖</span>SEÑAL ML</div>
+    <div class="card-title">SEÑAL ML</div>
     <div class="loading"><div class="spinner"></div></div>`
   $('card-hurst').innerHTML = `
-    <div class="card-title"><span class="icon">🌊</span>EXPONENTE DE HURST</div>
+    <div class="card-title">EXPONENTE DE HURST</div>
     <div class="loading"><div class="spinner"></div></div>`
 
   try {
-    const r    = await fetch(`${API}/analizar`, {
-      method:  'POST',
+    const r = await fetch(`${API}/analizar`, {
+      method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({ticker, periodo})
+      body: JSON.stringify({ticker, periodo})
     })
 
     if (!r.ok) {
@@ -910,10 +1078,10 @@ async function analizarTicker() {
     renderChart(chartMode, d.series, ticker)
 
   } catch (e) {
-    const msg = `<div class="error-msg">⚠️ ${e.message}</div>`
-    $('card-stats').innerHTML  = `<div class="card-title">📊 ERROR</div>${msg}`
-    $('card-señal').innerHTML  = `<div class="card-title">🤖 ERROR</div>${msg}`
-    $('card-hurst').innerHTML  = `<div class="card-title">🌊 ERROR</div>`
+    const msg = `<div class="error-msg">${e.message}</div>`
+    $('card-stats').innerHTML = `<div class="card-title">ERROR</div>${msg}`
+    $('card-señal').innerHTML = `<div class="card-title">ERROR</div>${msg}`
+    $('card-hurst').innerHTML = `<div class="card-title">ERROR</div>`
   }
 }
 
@@ -923,8 +1091,8 @@ function renderStats(d) {
   const reg = d.regimen
 
   const retClass = colorClass(s.retorno_anual, [0, 0])
-  const ddClass  = 'red'
-  const shClass  = colorClass(s.sharpe, [0.5, 1])
+  const ddClass = 'red'
+  const shClass = colorClass(s.sharpe, [0.5, 1])
 
   let micro = ''
   const mx = d.extra_crypto && d.extra_crypto.microestructura
@@ -942,7 +1110,7 @@ function renderStats(d) {
   }
 
   $('card-stats').innerHTML = `
-    <div class="card-title"><span class="icon">📊</span>ESTADÍSTICAS — ${d.ticker}</div>
+    <div class="card-title">ESTADÍSTICAS — ${d.ticker}</div>
     <div class="stat-grid">
       <div class="stat-item">
         <div class="stat-label">Retorno Anual</div>
@@ -971,7 +1139,7 @@ function renderStats(d) {
     </div>
     <div style="margin-top:14px">
       <span class="regimen-badge ${reg.estado === 'CALMA' ? 'calma' : 'estres'}">
-        ${reg.estado === 'CALMA' ? '✅' : '⚠️'} ${reg.estado}
+        ${reg.estado === 'CALMA' ? '' : ''} ${reg.estado}
         &nbsp;│&nbsp; Vol ${reg.vol_actual.toFixed(1)}%
         (umbral ${reg.vol_mediana.toFixed(1)}%)
       </span>
@@ -984,7 +1152,7 @@ function renderSeñal(d) {
   const ml = d.señal_ml
   if (!ml || ml.accion === 'CALCULANDO') {
     $('card-señal').innerHTML = `
-      <div class="card-title"><span class="icon">🤖</span>SEÑAL ML</div>
+      <div class="card-title">SEÑAL ML</div>
       <div style="color:var(--yellow);text-align:center;padding:20px">
         Modelo no entrenado.<br>
         <button class="btn" style="margin-top:12px"
@@ -994,13 +1162,13 @@ function renderSeñal(d) {
   }
 
   const acClass = ml.accion === 'COMPRAR' ? 'buy' :
-                  ml.accion === 'VENDER'  ? 'sell' : 'hold'
+                  ml.accion === 'VENDER' ? 'sell' : 'hold'
   const prob_pct = (ml.prob * 100).toFixed(0)
   const barColor = ml.accion === 'COMPRAR' ? 'var(--green)' :
-                   ml.accion === 'VENDER'  ? 'var(--red)'   : 'var(--text2)'
+                   ml.accion === 'VENDER' ? 'var(--red)' : 'var(--text2)'
 
   $('card-señal').innerHTML = `
-    <div class="card-title"><span class="icon">🤖</span>SEÑAL ML — ${d.ticker}</div>
+    <div class="card-title">SEÑAL ML — ${d.ticker}</div>
     <div class="signal-display">
       <div class="signal-action ${acClass}">${ml.accion}</div>
       <div class="signal-prob">Confianza: <strong>${ml.confianza}</strong> (${prob_pct}%)</div>
@@ -1016,13 +1184,13 @@ function renderSeñal(d) {
 
 // ── Render Hurst ────────────────────────────────────────────
 function renderHurst(d) {
-  const H    = d.hurst.valor
-  const pct  = (H * 100).toFixed(0)
-  const col  = d.hurst.color === 'green' ? 'var(--green)' :
+  const H = d.hurst.valor
+  const pct = (H * 100).toFixed(0)
+  const col = d.hurst.color === 'green' ? 'var(--green)' :
                d.hurst.color === 'orange'? 'var(--yellow)' : 'var(--text2)'
 
   $('card-hurst').innerHTML = `
-    <div class="card-title"><span class="icon">🌊</span>EXPONENTE DE HURST</div>
+    <div class="card-title">EXPONENTE DE HURST</div>
     <div class="hurst-gauge">
       <div class="hurst-value" style="color:${col}">${H.toFixed(3)}</div>
       <div style="width:100%">
@@ -1030,10 +1198,7 @@ function renderHurst(d) {
           <div class="hurst-bar-fill"></div>
           <div class="hurst-marker" style="left:${pct}%"></div>
         </div>
-        <div class="hurst-labels">
-          <span>0 Anti-persist.</span>
-          <span>0.5 Aleatorio</span>
-          <span>1.0 Persistente</span>
+        <div class="hurst-labels"><span>0 Anti-persist.</span><span>0.5 Aleatorio</span><span>1.0 Persistente</span>
         </div>
       </div>
       <div class="hurst-señal" style="color:${col}">${d.hurst.señal}</div>
@@ -1051,22 +1216,22 @@ function renderChart(modo, series, ticker) {
 
   if (modo === 'precio') {
     labels = series.fechas
-    data   = series.precios
-    label  = `${ticker} — Precio`
-    color  = '#4d9fff'
-    fill   = false
+    data = series.precios
+    label = `${ticker} — Precio`
+    color = '#4d9fff'
+    fill = false
   } else if (modo === 'vol') {
     labels = series.fechas
-    data   = series.vol
-    label  = 'Volatilidad Anualizada %'
-    color  = '#f0b429'
-    fill   = true
+    data = series.vol
+    label = 'Volatilidad Anualizada %'
+    color = '#f0b429'
+    fill = true
   } else {
     labels = series.fechas
-    data   = series.hurst
-    label  = 'Hurst Rolling (63d)'
-    color  = '#2ecc71'
-    fill   = false
+    data = series.hurst
+    label = 'Hurst Rolling (63d)'
+    color = '#2ecc71'
+    fill = false
   }
 
   chartInstance = new Chart(ctx, {
@@ -1076,18 +1241,18 @@ function renderChart(modo, series, ticker) {
       datasets: [{
         label,
         data,
-        borderColor:     color,
+        borderColor: color,
         backgroundColor: fill ? color + '18' : 'transparent',
-        borderWidth:     1.5,
-        pointRadius:     0,
-        tension:         0.2,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.2,
         fill,
       }]
     },
     options: {
-      responsive:          true,
+      responsive: true,
       maintainAspectRatio: false,
-      animation:           { duration: 400 },
+      animation: { duration: 400 },
       plugins: {
         legend: { labels: { color: '#5a7a99', font: { family: 'JetBrains Mono', size: 11 } } },
         tooltip: {
@@ -1104,12 +1269,12 @@ function renderChart(modo, series, ticker) {
         x: {
           ticks: { color: '#5a7a99', maxTicksLimit: 8,
                    font: { family: 'JetBrains Mono', size: 10 } },
-          grid:  { color: '#1e2a38' }
+          grid: { color: '#1e2a38' }
         },
         y: {
           ticks: { color: '#5a7a99',
                    font: { family: 'JetBrains Mono', size: 10 } },
-          grid:  { color: '#1e2a38' }
+          grid: { color: '#1e2a38' }
         }
       }
     }
@@ -1119,7 +1284,7 @@ function renderChart(modo, series, ticker) {
   if (modo === 'hurst') {
     chartInstance.data.datasets.push({
       label: 'H = 0.5 (aleatorio)',
-      data:  new Array(labels.length).fill(0.5),
+      data: new Array(labels.length).fill(0.5),
       borderColor: '#e74c3c55',
       borderWidth: 1,
       borderDash: [4,4],
@@ -1144,20 +1309,20 @@ async function entrenarModelo() {
 
   const btn = event.target
   btn.textContent = 'ENTRENANDO...'
-  btn.disabled    = true
+  btn.disabled = true
 
   try {
     const r = await fetch(`${API}/entrenar/${ticker}`)
     if (!r.ok) throw new Error("Error del servidor")
     const d = await r.json()
     const msg= d.mensaje || d.status || "Modelo de ${ticker} entrenando en background"
-    alert(`✓ ${msg}`)
+    alert(` ${msg}`)
     setTimeout(() => analizarTicker(), 8000)
   } catch (e) {
     alert('Error entrenando modelo')
   } finally {
     btn.textContent = 'ENTRENAR ML'
-    btn.disabled    = false
+    btn.disabled = false
   }
 }
 
@@ -1193,10 +1358,10 @@ async function optimizarPortfolio() {
   }
 
   $('card-pesos').innerHTML = `
-    <div class="card-title"><span class="icon">📐</span>OPTIMIZANDO...</div>
+    <div class="card-title">OPTIMIZANDO...</div>
     <div class="loading"><div class="spinner"></div> Calculando pesos óptimos...</div>`
   $('card-corr').innerHTML = `
-    <div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
+    <div class="card-title">CORRELACIONES</div>
     <div class="loading"><div class="spinner"></div></div>`
 
   try {
@@ -1213,14 +1378,14 @@ async function optimizarPortfolio() {
     renderCorrelaciones(d)
   } catch (e) {
     $('card-pesos').innerHTML = `
-      <div class="card-title">📐 ERROR</div>
-      <div class="error-msg">⚠️ ${e.message}</div>`
+      <div class="card-title">ERROR</div>
+      <div class="error-msg">${e.message}</div>`
   }
 }
 
 function renderPesos(d) {
   const m = d.metricas
-  let html = `<div class="card-title"><span class="icon">📐</span>PESOS ÓPTIMOS</div>`
+  let html = `<div class="card-title">PESOS ÓPTIMOS</div>`
 
   for (const [ticker, peso] of Object.entries(d.pesos)) {
     const pct = (peso * 100).toFixed(1)
@@ -1253,7 +1418,7 @@ function renderPesos(d) {
 
 function renderCorrelaciones(d) {
   const c = d.correlacion
-  let html = `<div class="card-title"><span class="icon">🔗</span>CORRELACIONES</div>
+  let html = `<div class="card-title">CORRELACIONES</div>
     <table class="corr-table">
       <tr><th></th>`
 
@@ -1265,7 +1430,7 @@ function renderCorrelaciones(d) {
     row.forEach(val => {
       const abs = Math.abs(val)
       const r = val >= 0 ? Math.round(abs * 200) : 0
-      const g = val <  0 ? Math.round(abs * 180) : 0
+      const g = val < 0 ? Math.round(abs * 180) : 0
       const bg = val === 1 ? '#1e2a38' :
                  `rgba(${r},${g},60,${Math.min(abs * 0.6, 0.5)})`
       html += `<td style="background:${bg};color:${abs > 0.7 ? 'white':'var(--text)'}">${val.toFixed(2)}</td>`
@@ -1279,7 +1444,7 @@ function renderCorrelaciones(d) {
 
 // ── Value at Risk ───────────────────────────────────────────
 async function analizarVaR() {
-  const ticker  = $('ticker-input').value.trim().toUpperCase()
+  const ticker = $('ticker-input').value.trim().toUpperCase()
   const periodo = $('periodo-select').value
   if (!ticker) return
 
@@ -1288,9 +1453,9 @@ async function analizarVaR() {
 
   try {
     const r = await fetch(`${API}/var`, {
-      method:  'POST',
+      method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({ ticker, periodo })
+      body: JSON.stringify({ ticker, periodo })
     })
     if (!r.ok) {
       const err = await r.json()
@@ -1298,7 +1463,7 @@ async function analizarVaR() {
     }
     renderVaR(await r.json())
   } catch (e) {
-    $('var-content').innerHTML = `<div class="error-msg">⚠️ ${e.message}</div>`
+    $('var-content').innerHTML = `<div class="error-msg">${e.message}</div>`
   }
 }
 
@@ -1325,7 +1490,6 @@ function renderVaR(d) {
     </div>`
   for (const bt of d.backtests) {
     const zona = bt.basel.zona.toLowerCase()
-    const zonaEmoji = zona === 'green' ? '🟢' : zona === 'yellow' ? '🟡' : '🔴'
     backtests += `
       <div class="var-bt-row">
         <div class="modelo">${bt.modelo}</div>
@@ -1341,7 +1505,7 @@ function renderVaR(d) {
           <span style="color:var(--text2)">Z2=${bt.es_test.z2.toFixed(2)}</span>
         </div>
         <div>
-          <span class="zona-badge ${zona}">${zonaEmoji} ${bt.basel.zona}</span>
+          <span class="zona-badge ${zona}">${bt.basel.zona}</span>
           <span style="color:var(--text2)">×${bt.basel.multiplicador_capital.toFixed(2)}</span>
         </div>
       </div>`
@@ -1403,7 +1567,7 @@ function renderVaR(d) {
        (base 3.00).`
 
   $('var-content').innerHTML = `
-    <div class="card-title"><span class="icon">🛡️</span>VALUE AT RISK — ${d.ticker}
+    <div class="card-title">VALUE AT RISK — ${d.ticker}
       <span style="color:var(--text2);font-weight:400;font-size:11px">
         &nbsp;│&nbsp; ${d.n_observaciones} días &nbsp;│&nbsp; ventana ${d.ventana} &nbsp;│&nbsp; cartera $${d.valor_portfolio.toLocaleString('es-AR')}
       </span>
@@ -1441,7 +1605,7 @@ async function cargarMacro() {
     }
     renderMacro(await r.json())
   } catch (e) {
-    $('macro-content').innerHTML = `<div class="error-msg">⚠️ ${e.message}</div>`
+    $('macro-content').innerHTML = `<div class="error-msg">${e.message}</div>`
   }
 }
 
@@ -1451,22 +1615,23 @@ function renderMacro(d) {
 
   const regClass = reg.estado === 'RISK-ON' ? 'green' :
                    reg.estado === 'RISK-OFF' ? 'estres' : ''
+  const sc = (reg.score >= 0 ? '+' : '') + reg.score
   const regBadge = reg.estado === 'RISK-ON'
-    ? `<span class="regimen-badge calma">✅ ${reg.estado} (score ${reg.score >= 0 ? '+' : ''}${reg.score})</span>`
+    ? `<span class="regimen-badge calma">${reg.estado} (score ${sc})</span>`
     : reg.estado === 'RISK-OFF'
-    ? `<span class="regimen-badge estres">🔴 ${reg.estado} (score ${reg.score})</span>`
-    : `<span class="regimen-badge" style="background:rgba(90,122,153,.12);color:var(--text2)">➖ NEUTRAL (score ${reg.score >= 0 ? '+' : ''}${reg.score})</span>`
+    ? `<span class="regimen-badge estres">${reg.estado} (score ${reg.score})</span>`
+    : `<span class="regimen-badge" style="background:rgba(90,122,153,.12);color:var(--text2)">NEUTRAL (score ${sc})</span>`
 
   const curvaBadge = cv.invertida
-    ? `<span class="zona-badge red">🔴 curva invertida</span>`
-    : `<span class="zona-badge green">🟢 pendiente ${cv.pendiente_10y_3m >= 0 ? '+' : ''}${cv.pendiente_10y_3m}pp</span>`
+    ? `<span class="zona-badge red">curva invertida</span>`
+    : `<span class="zona-badge green">pendiente ${cv.pendiente_10y_3m >= 0 ? '+' : ''}${cv.pendiente_10y_3m}pp</span>`
   const vixBadge = vts.ratio_vix_vix3m > 1
-    ? `<span class="zona-badge red">🔴 VIX backwardation ${vts.ratio_vix_vix3m}</span>`
-    : `<span class="zona-badge green">🟢 VIX contango ${vts.ratio_vix_vix3m}</span>`
+    ? `<span class="zona-badge red">VIX backwardation ${vts.ratio_vix_vix3m}</span>`
+    : `<span class="zona-badge green">VIX contango ${vts.ratio_vix_vix3m}</span>`
   const crBadge = (cr.percentil_historico != null)
     ? (cr.percentil_historico < 0.2
-        ? `<span class="zona-badge red">🔴 crédito HY estresado (p${(cr.percentil_historico*100).toFixed(0)})</span>`
-        : `<span class="zona-badge green">🟢 crédito HY p${(cr.percentil_historico*100).toFixed(0)}</span>`)
+        ? `<span class="zona-badge red">crédito HY estresado (p${(cr.percentil_historico*100).toFixed(0)})</span>`
+        : `<span class="zona-badge green">crédito HY p${(cr.percentil_historico*100).toFixed(0)}</span>`)
     : ''
 
   let corr = ''
@@ -1475,7 +1640,7 @@ function renderMacro(d) {
   }
 
   $('macro-content').innerHTML = `
-    <div class="card-title"><span class="icon">🌐</span>RÉGIMEN DE MERCADO
+    <div class="card-title">RÉGIMEN DE MERCADO
       &nbsp; ${regBadge}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">
@@ -1505,6 +1670,50 @@ function renderMacro(d) {
     </div>`
 }
 
+// ── Debate de agentes ───────────────────────────────────────
+async function cargarAgentes() {
+  const tickers = $('agentes-input').value.trim()
+  if (!tickers) return
+  $('agentes-content').innerHTML =
+    `<div class="loading"><div class="spinner"></div> Bull / Bear / Risk debatiendo ${tickers}...</div>`
+  try {
+    const r = await fetch(`${API}/agentes?tickers=${encodeURIComponent(tickers)}`)
+    if (!r.ok) {
+      const err = await r.json()
+      throw new Error(err.detail || 'Error del servidor')
+    }
+    const d = await r.json()
+    if (!d.decisiones || !d.decisiones.length) {
+      $('agentes-content').innerHTML =
+        '<div style="color:var(--text2);font-size:12px;padding:12px">Sin decisiones (¿tickers válidos?).</div>'
+      return
+    }
+    let html = `<table class="trades-table">
+      <tr><th>Ticker</th><th>Decisión</th><th>Confianza</th><th>Kelly</th><th>Estado</th></tr>`
+    for (const x of d.decisiones) {
+      const cls = x.accion === 'COMPRAR' ? 'buy' : x.accion === 'VENDER' ? 'sell' : 'hold'
+      html += `<tr>
+        <td><strong>${x.ticker}</strong></td>
+        <td><span class="badge ${cls}">${x.accion}</span></td>
+        <td>${(x.confianza * 100).toFixed(0)}%</td>
+        <td>${(x.kelly * 100).toFixed(1)}%</td>
+        <td style="color:${x.vetado ? 'var(--red)' : 'var(--text2)'}">${x.vetado ? 'VETADO por Risk' : '—'}</td>
+      </tr>`
+    }
+    html += '</table>'
+    const c = d.decisiones.filter(x => x.accion === 'COMPRAR').length
+    const v = d.decisiones.filter(x => x.accion === 'VENDER').length
+    const e = d.decisiones.length - c - v
+    html += `<div style="margin-top:10px;font-size:11px;color:var(--text2)">
+      ${c} compra${c !== 1 ? 's' : ''} · ${v} venta${v !== 1 ? 's' : ''} · ${e} espera${e !== 1 ? 's' : ''}
+      &nbsp;│&nbsp; el mismo debate corre en <code>python sistema_agentes.py</code>
+    </div>`
+    $('agentes-content').innerHTML = html
+  } catch (e) {
+    $('agentes-content').innerHTML = `<div class="error-msg">${e.message}</div>`
+  }
+}
+
 // ── Trades ───────────────────────────────────────────────────
 async function cargarTrades() {
   try {
@@ -1524,7 +1733,7 @@ async function cargarTrades() {
       </tr>`
 
     d.trades.slice().reverse().forEach(t => {
-      const cls = t.accion === 'BUY'  ? 'buy' :
+      const cls = t.accion === 'BUY' ? 'buy' :
                   t.accion === 'SELL' ? 'sell' : 'hold'
       html += `<tr>
         <td>${new Date(t.timestamp).toLocaleString()}</td>
@@ -1546,19 +1755,141 @@ async function cargarTrades() {
   }
 }
 
+// ── Burbujas (LPPLS) ────────────────────────────────────────
+async function detectarBurbuja() {
+  const ticker = $('ticker-input').value.trim().toUpperCase()
+  const periodo = $('periodo-select').value
+  if (!ticker) return
+  mostrarVista('burbujas')
+  $('burbuja-content').innerHTML =
+    `<div class="loading"><div class="spinner"></div> Ajustando modelo LPPLS para ${ticker} (~15-30 s)...</div>`
+  try {
+    const r = await fetch(`${API}/burbuja/${encodeURIComponent(ticker)}?periodo=${periodo}`)
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Error del servidor') }
+    renderBurbuja(await r.json())
+  } catch (e) {
+    $('burbuja-content').innerHTML = `<div class="error-msg">${e.message}</div>`
+  }
+}
+
+function renderBurbuja(d) {
+  const conf = d.confianza
+  const col = d.es_burbuja && conf >= 0.7 ? 'var(--red)'
+             : conf >= 0.5 ? 'var(--yellow)' : 'var(--green)'
+  const badge = d.es_burbuja
+    ? `<span class="zona-badge red">SEÑAL DE BURBUJA · confianza ${(conf*100).toFixed(0)}%</span>`
+    : `<span class="zona-badge green">sin señal clara · confianza ${(conf*100).toFixed(0)}%</span>`
+
+  $('burbuja-content').innerHTML = `
+    <div class="card-title">LPPLS — ${d.ticker}</div>
+    <div style="margin:8px 0 12px">${badge}
+      ${d.tc_dias > 0 ? `<span style="color:var(--text2);font-size:11px;margin-left:10px">tiempo crítico estimado: ~${d.tc_dias} días</span>` : ''}
+    </div>
+    <div style="font-size:11px;line-height:1.6;color:var(--text);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:14px">
+      ${d.interpretacion}
+    </div>
+    <table class="var-table" style="max-width:420px;margin-bottom:16px">
+      <tr><th>parámetro</th><th>valor</th><th>rango de burbuja</th></tr>
+      <tr><td>m (exponente)</td><td>${d.params.m.toFixed(3)}</td><td>0.1 – 0.9</td></tr>
+      <tr><td>ω (log-periódica)</td><td>${d.params.omega.toFixed(2)}</td><td>6 – 13</td></tr>
+      <tr><td>B (aceleración)</td><td>${d.params.B.toFixed(3)}</td><td>&lt; 0</td></tr>
+    </table>
+    <div class="chart-container" style="height:300px"><canvas id="bubble-chart"></canvas></div>`
+
+  const s = d.series
+  if (bubbleChart) bubbleChart.destroy()
+  bubbleChart = new Chart($('bubble-chart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: s.fechas,
+      datasets: [
+        { label: 'Precio', data: s.precio, borderColor: '#4d9fff', borderWidth: 1.4, pointRadius: 0, tension: 0.05 },
+        { label: 'LPPLS ajustado', data: s.lppls, borderColor: col, borderWidth: 1.6, borderDash: [5,3], pointRadius: 0, tension: 0.05 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#c9d5e0', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#5a7a99', maxTicksLimit: 8, font: { size: 9 } }, grid: { color: '#1e2a38' } },
+        y: { ticks: { color: '#5a7a99', font: { size: 9 } }, grid: { color: '#1e2a38' } },
+      }
+    }
+  })
+}
+
+// ── Stress testing ──────────────────────────────────────────
+async function analizarStress() {
+  const tickers = $('stress-input').value.trim()
+  if (!tickers) return
+  $('stress-content').innerHTML =
+    `<div class="loading"><div class="spinner"></div> Corriendo escenarios de stress sobre ${tickers}...</div>`
+  try {
+    const r = await fetch(`${API}/stress`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ tickers: tickers.split(',').map(t => t.trim()).filter(Boolean) })
+    })
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Error del servidor') }
+    renderStress(await r.json())
+  } catch (e) {
+    $('stress-content').innerHTML = `<div class="error-msg">${e.message}</div>`
+  }
+}
+
+function renderStress(d) {
+  const peor = Math.min(...d.escenarios.map(e => e.pnl_pct))
+  let rows = ''
+  for (const e of d.escenarios) {
+    const w = Math.min(100, Math.abs(e.pnl_pct / peor) * 100)
+    const col = e.pnl_pct < 0 ? 'var(--red)' : 'var(--green)'
+    const extra = (e.max_dd_pct != null)
+      ? `<span style="color:var(--text2)">peor día ${e.peor_dia_pct.toFixed(1)}% · DD ${e.max_dd_pct.toFixed(1)}%</span>` : ''
+    rows += `<tr>
+      <td>${e.escenario}</td>
+      <td style="color:var(--text2);font-size:10px">${e.tipo === 'historical' ? 'histórico' : e.tipo === 'reverse' ? 'reverse' : 'hipotético'}</td>
+      <td style="min-width:160px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden">
+            <div style="width:${w}%;height:100%;background:${col}"></div>
+          </div>
+          <strong style="color:${col};white-space:nowrap">${e.pnl_pct >= 0 ? '+' : ''}${e.pnl_pct.toFixed(1)}%</strong>
+        </div>
+      </td>
+      <td>${e.pnl_monto != null ? '$' + Math.round(e.pnl_monto).toLocaleString('es-AR') : '—'}</td>
+      <td>${extra}</td>
+    </tr>`
+  }
+
+  const rev = d.reverse
+  const movs = Object.entries(rev.movimientos).map(([k,v]) => `${k} ${v >= 0 ? '+' : ''}${v.toFixed(1)}%`).join(' · ')
+
+  $('stress-content').innerHTML = `
+    <div class="card-title">STRESS — cartera ${d.tickers.join(', ')}
+      <span style="color:var(--text2);font-weight:400;font-size:11px">&nbsp;│&nbsp; $${d.valor.toLocaleString('es-AR')}, pesos iguales</span>
+    </div>
+    <table class="var-table">
+      <tr><th>Escenario</th><th>Tipo</th><th>P&amp;L</th><th>Monto</th><th></th></tr>
+      ${rows}
+    </table>
+    <div style="margin-top:14px;padding:10px 12px;border-radius:4px;background:var(--bg3);border:1px solid var(--border);font-size:11px;line-height:1.6">
+      <strong>Reverse stress</strong> — para perder el 10% del libro, el mercado tendría que moverse:
+      <br><span style="color:var(--text2)">${movs}</span>
+    </div>`
+}
+
 // ── Init ─────────────────────────────────────────────────────
 window.onload = async () => {
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.onclick = () => mostrarVista(n.dataset.view)
+  })
   renderPortfolioTickers()
-  cargarMacro()
-  await cargarSenales()
-  await cargarTrades()
+  vistasCargadas.add('resumen')
 
-  // Analizar AAPL por defecto
+  cargarSenales()                    // en segundo plano: ~40 activos, puede tardar
   $('ticker-input').value = 'AAPL'
   await analizarTicker()
 
-  // Refrescar señales cada 5 minutos
-  setInterval(cargarSenales, 5 * 60 * 1000)
+  setInterval(cargarSenales, 10 * 60 * 1000)
 }
 </script>
 </body>

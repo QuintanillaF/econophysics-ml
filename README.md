@@ -139,7 +139,7 @@ El paquete `varengine/` implementa desde cero la medición de riesgo de mercado 
 su validación supervisora. Es el módulo con test más completos del repo
 (97 tests que verifican **propiedades matemáticas**, no snapshots).
 
-> 📄 **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)** — documento de referencia con
+> **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)** — documento de referencia con
 > las fórmulas, hipótesis nulas y supuestos de todo el framework.
 
 ### Value at Risk (VaR)
@@ -339,9 +339,9 @@ base de 3:
 
 | Zona | Excepciones / 250 días | Multiplicador de capital | Lectura |
 |---|---|---|---|
-| 🟢 **Verde** | 0–4 | 3.00 | modelo aceptado, sin penalización |
-| 🟡 **Amarilla** | 5–9 | 3.40 – 3.85 | bajo revisión, capital regulatorio más alto |
-| 🔴 **Roja** | ≥ 10 | 4.00 | modelo rechazado, remediación obligatoria |
+| **Verde** | 0–4 | 3.00 | modelo aceptado, sin penalización |
+| **Amarilla** | 5–9 | 3.40 – 3.85 | bajo revisión, capital regulatorio más alto |
+| **Roja** | ≥ 10 | 4.00 | modelo rechazado, remediación obligatoria |
 
 Esto es lo que un equipo de riesgos mira antes que cualquier p-valor: **convierte
 un supuesto estadístico en un costo concreto**.
@@ -384,10 +384,10 @@ backtest walk-forward sobre **1549 días**:
 
 | Modelo | Excepciones | Kupiec | ES (Acerbi-Székely) | Zona Basilea |
 |---|---|---|---|---|
-| Simulación histórica | 23 (1.48%) | no rechazado (p = 0.074) | **RECHAZADO (Z2 = −0.74, p = 0.018)** | 🟢 VERDE — ×3.00 |
-| Paramétrico — normal | 25 (1.61%) | **RECHAZADO (p = 0.026)** | **RECHAZADO (Z2 = −0.93, p = 0.008)** | 🟡 **AMARILLA — ×3.40** |
-| Paramétrico — Student-t | 24 (1.55%) | **RECHAZADO (p = 0.044)** | **RECHAZADO (Z2 = −0.54, p = 0.040)** | 🟢 VERDE — ×3.00 |
-| **Filtered historical (EWMA)** | **17 (1.10%)** | **no rechazado (p = 0.70)** | **no rechazado (Z2 = −0.22, p = 0.23)** | 🟢 **VERDE — ×3.00** |
+| Simulación histórica | 23 (1.48%) | no rechazado (p = 0.074) | **RECHAZADO (Z2 = −0.74, p = 0.018)** | VERDE — ×3.00 |
+| Paramétrico — normal | 25 (1.61%) | **RECHAZADO (p = 0.026)** | **RECHAZADO (Z2 = −0.93, p = 0.008)** | **AMARILLA — ×3.40** |
+| Paramétrico — Student-t | 24 (1.55%) | **RECHAZADO (p = 0.044)** | **RECHAZADO (Z2 = −0.54, p = 0.040)** | VERDE — ×3.00 |
+| **Filtered historical (EWMA)** | **17 (1.10%)** | **no rechazado (p = 0.70)** | **no rechazado (Z2 = −0.22, p = 0.23)** | **VERDE — ×3.00** |
 
 Hay **dos hallazgos**, no uno:
 

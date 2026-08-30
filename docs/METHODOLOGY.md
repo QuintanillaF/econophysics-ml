@@ -281,9 +281,9 @@ en una penalización de capital. El incremento se suma al factor base de 3:
 
 | Zona | Excepciones / 250 días | Multiplicador | Lectura |
 |---|---|---|---|
-| 🟢 Verde | 0–4 | 3.00 | modelo aceptado, sin penalización |
-| 🟡 Amarilla | 5 → 9 | 3.40 → 3.85 | bajo revisión, más capital regulatorio |
-| 🔴 Roja | ≥ 10 | 4.00 | modelo rechazado, remediación obligatoria |
+| Verde | 0–4 | 3.00 | modelo aceptado, sin penalización |
+| Amarilla | 5 → 9 | 3.40 → 3.85 | bajo revisión, más capital regulatorio |
+| Roja | ≥ 10 | 4.00 | modelo rechazado, remediación obligatoria |
 
 Ventanas distintas de 250 días se escalan proporcionalmente. **Esto es lo que un
 equipo de riesgos mira antes que cualquier p-valor:** convierte un supuesto

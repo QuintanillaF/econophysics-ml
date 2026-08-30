@@ -46,6 +46,19 @@ YF_A_COINGECKO = {
 TOP_10_BINANCE = list(BINANCE_A_YF.keys())
 TOP_10_YF      = list(BINANCE_A_YF.values())
 
+# ── Watchlist: 20 acciones + 20 criptos que analiza el dashboard ──
+WATCHLIST_ACCIONES = [
+    'AAPL', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AVGO', 'TSLA', 'BRK-B', 'LLY',
+    'JPM', 'V', 'WMT', 'XOM', 'UNH', 'MA', 'COST', 'AMD', 'NFLX', 'PLTR',
+]
+WATCHLIST_CRYPTO = [
+    'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 'DOGE-USD', 'ADA-USD',
+    'AVAX-USD', 'LINK-USD', 'DOT-USD', 'TRX-USD', 'TON-USD', 'SHIB-USD', 'LTC-USD',
+    'BCH-USD', 'ATOM-USD', 'XLM-USD', 'NEAR-USD', 'HBAR-USD', 'ETC-USD',
+]
+# Intercalado 1:1 para que ambos tipos aparezcan al scrollear la barra de señales.
+WATCHLIST = [t for par in zip(WATCHLIST_ACCIONES, WATCHLIST_CRYPTO) for t in par]
+
 
 def normalizar_ticker(ticker: str) -> dict:
     t = ticker.upper().strip()

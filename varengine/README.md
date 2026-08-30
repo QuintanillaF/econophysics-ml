@@ -38,10 +38,10 @@ days exposes it, and exposes something else:
 
 | Model | Exceptions | Kupiec | ES test (Acerbi-Székely) | Basel zone |
 |---|---|---|---|---|
-| Historical simulation | 23 (1.48%) | not rejected (p = 0.074) | **REJECTED** (Z2 = −0.74, p = 0.018) | 🟢 GREEN |
-| Parametric — normal | 25 (1.61%) | **REJECTED** (p = 0.026) | **REJECTED** (Z2 = −0.93, p = 0.008) | 🟡 YELLOW |
-| Parametric — Student-t | 24 (1.55%) | **REJECTED** (p = 0.044) | **REJECTED** (Z2 = −0.54, p = 0.040) | 🟢 GREEN |
-| **Filtered historical (EWMA)** | **17 (1.10%)** | **not rejected** (p = 0.70) | **not rejected** (Z2 = −0.22, p = 0.23) | 🟢 GREEN |
+| Historical simulation | 23 (1.48%) | not rejected (p = 0.074) | **REJECTED** (Z2 = −0.74, p = 0.018) | GREEN |
+| Parametric — normal | 25 (1.61%) | **REJECTED** (p = 0.026) | **REJECTED** (Z2 = −0.93, p = 0.008) | YELLOW |
+| Parametric — Student-t | 24 (1.55%) | **REJECTED** (p = 0.044) | **REJECTED** (Z2 = −0.54, p = 0.040) | GREEN |
+| **Filtered historical (EWMA)** | **17 (1.10%)** | **not rejected** (p = 0.70) | **not rejected** (Z2 = −0.22, p = 0.23) | GREEN |
 
 Two findings:
 

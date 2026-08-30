@@ -13,6 +13,7 @@ INSTALACIÓN:
   pip install fastapi uvicorn yfinance requests numpy scipy pandas scikit-learn
 """
 
+import sys
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -23,7 +24,13 @@ from datetime import datetime
 from pathlib import Path
 import warnings; warnings.filterwarnings('ignore')
 
-from data_layer import get_data_layer, normalizar_ticker, TOP_10_BINANCE, TOP_10_YF
+# Las consolas de Windows son cp1252 y rompen con los caracteres de caja del banner.
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except (AttributeError, ValueError):
+    pass
+
+from data_layer import get_data_layer, normalizar_ticker, TOP_10_BINANCE, TOP_10_YF, WATCHLIST
 
 # ── App ───────────────────────────────────────────────────────
 app = FastAPI(title="Trading Dashboard — Econofísica + ML", version="2.0.0")
@@ -31,6 +38,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 static_dir = Path("static"); static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.on_event("startup")
+def _precalentar_senales():
+    """Calcula la barra de señales en un hilo al arrancar, así la primera carga
+    del dashboard la encuentra cacheada."""
+    import threading
+    threading.Thread(target=lambda: get_señales(""), daemon=True).start()
 
 # ── Modelos de request ────────────────────────────────────────
 class AnalisisRequest(BaseModel):
@@ -40,6 +55,11 @@ class AnalisisRequest(BaseModel):
 class PortafolioRequest(BaseModel):
     tickers: list[str]
     periodo: str = "1y"
+
+class StressRequest(BaseModel):
+    tickers: list[str]
+    periodo: str = "3y"
+    valor: float = 1_000_000.0
 
 class VaRRequest(BaseModel):
     ticker: str
@@ -265,17 +285,26 @@ def get_mercado():
 
 
 @app.get("/api/señales")
-async def get_señales(tickers: str = "BTCUSDT,ETHUSDT,SOLUSDT,AAPL,NVDA,SPY"):
-    """Señales rápidas para múltiples activos."""
-    dl   = get_data_layer()
-    lista = [t.strip().upper() for t in tickers.split(",")][:8]
-    res  = []
+def get_señales(tickers: str = ""):
+    """Señales rápidas para múltiples activos.
 
-    for ticker in lista:
+    Sin el parámetro `tickers` usa la watchlist completa (20 acciones + 20 cripto).
+    Endpoint síncrono (`def`) para no bloquear el event loop mientras recorre ~40
+    activos; el resultado se cachea 15 min.
+    """
+    dl    = get_data_layer()
+    lista = [t.strip().upper() for t in tickers.split(",") if t.strip()] or list(WATCHLIST)
+    lista = lista[:60]
+
+    key = "senales_" + ",".join(lista)
+    if cache_ok(key):
+        return _cache[key]
+
+    def _una_senal(ticker: str):
         try:
             info = normalizar_ticker(ticker)
             df   = dl.get_ohlcv(ticker, 'corto', '3mo')
-            if df.empty: continue
+            if df.empty: return None
 
             c = df['close'].squeeze(); r = np.log(c/c.shift(1)).dropna()
             precio = dl.get_precio_actual(ticker) or float(c.iloc[-1])
@@ -295,12 +324,21 @@ async def get_señales(tickers: str = "BTCUSDT,ETHUSDT,SOLUSDT,AAPL,NVDA,SPY"):
                 extra['ob_ratio'] = ob
                 extra['ob_presion'] = 'COMPRADORA' if ob>1.2 else 'VENDEDORA' if ob<0.8 else 'NEUTRAL'
 
-            res.append({'ticker':ticker,'precio':round(precio,4),'ret_1s':round(ret_1s,2),
-                        'ret_1m':round(ret_1m,2),'vol_anual':round(vol,1),'hurst':round(H,3),
-                        'regimen':reg,'señal':señal,'extra':extra})
-        except Exception: continue
+            return {'ticker':ticker,'precio':round(precio,4),'ret_1s':round(ret_1s,2),
+                    'ret_1m':round(ret_1m,2),'vol_anual':round(vol,1),'hurst':round(H,3),
+                    'regimen':reg,'señal':señal,'extra':extra}
+        except Exception:
+            return None
 
-    return {'señales':res,'timestamp':datetime.now().isoformat()}
+    # Paralelo: el cuello de botella es la descarga por activo (I/O), no la CPU.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        por_ticker = dict(zip(lista, pool.map(_una_senal, lista)))
+    res = [por_ticker[t] for t in lista if por_ticker[t] is not None]  # conserva el orden
+
+    resultado = {'señales': res, 'timestamp': datetime.now().isoformat()}
+    _cache[key] = resultado
+    return resultado
 
 
 @app.post("/api/portfolio")
@@ -515,14 +553,21 @@ def analizar_var(req: VaRRequest):
 
 
 @app.get("/api/agentes")
-async def agentes_señales(tickers: str = "BTCUSDT,ETHUSDT,AAPL,NVDA"):
-    """Debate Bull/Bear/Risk para múltiples activos."""
+def agentes_señales(tickers: str = "AAPL,NVDA,MSFT,TSLA,AMZN,META,BTC-USD,ETH-USD,SOL-USD,BNB-USD"):
+    """Debate Bull/Bear/Risk para múltiples activos.
+
+    El debate hace análisis real por activo (~3-5 s c/u), así que se limita a 10 y
+    el resultado se cachea 15 min. Endpoint síncrono para no bloquear el loop.
+    """
     from sistema_agentes import SistemaAgentes
-    lista = [t.strip().upper() for t in tickers.split(",")][:6]
+    lista = [t.strip().upper() for t in tickers.split(",") if t.strip()][:10]
+    key = "agentes_" + ",".join(lista)
+    if cache_ok(key):
+        return _cache[key]
     try:
         sistema = SistemaAgentes(lista, capital_inicial=100_000)
         decisiones = sistema.analizar_todos(verbose=False)
-        return {
+        resultado = {
             'decisiones': [
                 {'ticker':d.ticker,'accion':d.accion,'confianza':d.confianza,
                  'kelly':d.kelly_fraccion,'vetado':d.vetado,'timestamp':d.timestamp}
@@ -531,8 +576,123 @@ async def agentes_señales(tickers: str = "BTCUSDT,ETHUSDT,AAPL,NVDA"):
             'macro': sistema.dl.get_macro_crypto() if any(normalizar_ticker(t)['es_crypto'] for t in lista) else {},
             'timestamp': datetime.now().isoformat(),
         }
+        _cache[key] = resultado
+        return resultado
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@app.post("/api/stress")
+def stress_testing(req: StressRequest):
+    """Stress testing de una cartera: replay histórico + shocks + reverse stress.
+
+    Usa varengine.stress. La primera corrida baja historia de factores desde 2007
+    (SPY, IEF, HYG, DXY, GLD, oil, BTC) y la cachea.
+    """
+    from varengine import Portfolio, reverse_stress, run_stress_suite
+
+    tickers = [t.upper().strip() for t in req.tickers][:8]
+    key = f"stress_{'_'.join(sorted(tickers))}_{req.periodo}_{req.valor}"
+    if cache_ok(key):
+        return _cache[key]
+
+    dl = get_data_layer()
+    series = {}
+    for t in tickers:
+        s = dl.get_ohlcv(t, 'largo', req.periodo)
+        if not s.empty:
+            series[t] = s['close'].squeeze()
+    if not series:
+        raise HTTPException(404, f"Sin datos para {', '.join(tickers)}")
+
+    prices = pd.DataFrame(series).dropna()
+    if len(prices) < 60:
+        raise HTTPException(400, "Historia insuficiente para estimar betas de factores")
+    prices = prices[(prices > 0).all(axis=1)]
+
+    try:
+        book = Portfolio(prices, value=req.valor)
+        suite = run_stress_suite(book)
+        rev = reverse_stress(book, target_loss_pct=0.10, direction="risk_off")
+    except (ValueError, ImportError) as e:
+        raise HTTPException(400, f"No se pudo correr el stress: {e}")
+
+    escenarios = [
+        {
+            'escenario':    idx,
+            'tipo':         row['kind'],
+            'pnl_pct':      round(float(row['pnl_pct']) * 100, 2),
+            'pnl_monto':    round(float(row['pnl_amount']), 0) if pd.notna(row['pnl_amount']) else None,
+            'peor_dia_pct': round(float(row['worst_day_pct']) * 100, 2) if pd.notna(row['worst_day_pct']) else None,
+            'max_dd_pct':   round(float(row['max_drawdown_pct']) * 100, 2) if pd.notna(row['max_drawdown_pct']) else None,
+            'detalle':      row['detail'],
+        }
+        for idx, row in suite.iterrows()
+    ]
+    resultado = {
+        'tickers':    list(series.keys()),
+        'valor':      req.valor,
+        'timestamp':  datetime.now().isoformat(),
+        'escenarios': escenarios,
+        'reverse': {
+            'objetivo_pct': -10,
+            'detalle':      rev.detail,
+            'movimientos':  {k: round(v * 100, 1) for k, v in rev.factor_moves.items()},
+        },
+    }
+    _cache[key] = resultado
+    return resultado
+
+
+@app.get("/api/burbuja/{ticker}")
+def detectar_burbuja(ticker: str, periodo: str = "2y"):
+    """Detección de burbuja por el modelo LPPLS de Sornette.
+
+    Ajusta ln P(t) = A + B(tc-t)^m + C(tc-t)^m cos(w ln(tc-t) + phi) por evolución
+    diferencial. Devuelve el score, el tiempo crítico y las series para graficar.
+    """
+    ticker = ticker.upper().strip()
+    key = f"burbuja_{ticker}_{periodo}"
+    if cache_ok(key):
+        return _cache[key]
+
+    from econofisica_mediano_largo_plazo import DetectorBurbuja
+
+    dl = get_data_layer()
+    df = dl.get_ohlcv(ticker, 'largo', periodo)
+    if df.empty:
+        raise HTTPException(404, f"Sin datos para {ticker}")
+    precios = df['close'].squeeze().dropna()
+    precios = precios[precios > 0]
+    if len(precios) < 120:
+        raise HTTPException(400, f"Historia insuficiente ({len(precios)} días, se necesitan >= 120)")
+
+    det = DetectorBurbuja(precios)
+    res = det.ajustar(n_intentos=25)
+    curva = det.curva_ajustada()
+
+    tail = min(300, len(precios))
+    resultado = {
+        'ticker':         ticker,
+        'periodo':        periodo,
+        'timestamp':      datetime.now().isoformat(),
+        'es_burbuja':     bool(res['es_burbuja']),
+        'confianza':      round(float(res['confianza_burbuja']), 3),
+        'tc_dias':        int(res['tc_dias_desde_hoy']),
+        'interpretacion': res['interpretacion'].strip(),
+        'params': {
+            'm':     round(float(res['m']), 4),
+            'omega': round(float(res['omega']), 4),
+            'B':     round(float(res['B']), 4),
+        },
+        'series': {
+            'fechas':  [str(d.date()) for d in precios.index[-tail:]],
+            'precio':  [round(float(p), 4) for p in precios.values[-tail:]],
+            'lppls':   [round(float(c), 4) for c in curva[-tail:]] if curva is not None else [],
+        },
+    }
+    _cache[key] = resultado
+    return resultado
 
 
 @app.get("/api/entrenar/{ticker}")
@@ -565,8 +725,8 @@ if __name__ == "__main__":
     print("  TRADING DASHBOARD v2.0")
     print("  Binance REST + CoinGecko + yfinance")
     print("═"*55)
-    print("  🌐 http://localhost:8000")
-    print("  📡 http://localhost:8000/docs")
-    print("  ⏹️  Ctrl+C para detener")
+    print("   http://localhost:8000")
+    print("   http://localhost:8000/docs")
+    print("    Ctrl+C para detener")
     print("═"*55 + "\n")
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True, log_level="warning")

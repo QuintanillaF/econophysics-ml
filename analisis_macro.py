@@ -195,34 +195,34 @@ class AnalisisMacro:
         vts = self.term_structure_vix()
         if vts:
             if vts["ratio_vix_vix3m"] > 1.0:
-                score -= 2; señales.append(f"🔴 VIX en backwardation ({vts['ratio_vix_vix3m']:.2f})")
+                score -= 2; señales.append(f"[-] VIX en backwardation ({vts['ratio_vix_vix3m']:.2f})")
             elif vts["vix"] > 25:
-                score -= 1; señales.append(f"⚠️  VIX elevado ({vts['vix']:.0f})")
+                score -= 1; señales.append(f"[-] VIX elevado ({vts['vix']:.0f})")
             else:
-                score += 1; señales.append(f"✅ VIX en contango ({vts['vix']:.0f})")
+                score += 1; señales.append(f"[+] VIX en contango ({vts['vix']:.0f})")
             if vts.get("move") and vts["move"] > 120:
-                score -= 1; señales.append(f"🔴 MOVE alto ({vts['move']:.0f}): estrés en bonos")
+                score -= 1; señales.append(f"[-] MOVE alto ({vts['move']:.0f}): estrés en bonos")
 
         cr = self.spread_credito()
         if cr and not np.isnan(cr["percentil_historico"]):
             if cr["percentil_historico"] < 0.20:
-                score -= 2; señales.append("🔴 Crédito HY estresado")
+                score -= 2; señales.append("[-] Crédito HY estresado")
             elif cr["percentil_historico"] > 0.70:
-                score += 1; señales.append("✅ Crédito HY fuerte")
+                score += 1; señales.append("[+] Crédito HY fuerte")
 
         cv = self.curva_tasas()
         if cv:
             if cv["invertida"]:
-                score -= 1; señales.append("⚠️  Curva de tasas invertida")
+                score -= 1; señales.append("[-] Curva de tasas invertida")
             else:
-                score += 0.5; señales.append("✅ Curva con pendiente positiva")
+                score += 0.5; señales.append("[+] Curva con pendiente positiva")
 
         dl = self.dolar()
         if dl:
             if dl["tendencia"].startswith("SUBIENDO"):
-                score -= 1; señales.append("⚠️  Dólar subiendo (risk-off)")
+                score -= 1; señales.append("[-] Dólar subiendo (risk-off)")
             elif dl["tendencia"].startswith("BAJANDO"):
-                score += 0.5; señales.append("✅ Dólar débil (risk-on)")
+                score += 0.5; señales.append("[+] Dólar débil (risk-on)")
 
         norm = float(np.clip(score / 5.0, -1, 1))
         estado = "RISK-OFF" if norm < -0.3 else "RISK-ON" if norm > 0.3 else "NEUTRAL"
@@ -251,38 +251,38 @@ class AnalisisMacro:
 
         cv = self.curva_tasas()
         if cv:
-            print(f"\n📉 CURVA DE TASAS\n{sep}")
+            print(f"\n CURVA DE TASAS\n{sep}")
             print(f"  10y: {cv['nivel_10y']}%   pendiente 10y-3m: {cv['pendiente_10y_3m']:+.2f}pp"
                   f"   curvatura: {cv['curvatura']}")
             print(f"  → {cv['lectura']}")
 
         vts = self.term_structure_vix()
         if vts:
-            print(f"\n📊 VOLATILIDAD (term structure)\n{sep}")
+            print(f"\n VOLATILIDAD (term structure)\n{sep}")
             print(f"  VIX {vts['vix']}  │  VIX3M {vts['vix3m']}  │  ratio {vts['ratio_vix_vix3m']:.3f}"
                   f"  │  MOVE {vts['move']}")
             print(f"  → {vts['lectura']}")
 
         cr = self.spread_credito()
         if cr:
-            print(f"\n💳 CRÉDITO (proxy HYG vs IEF)\n{sep}")
+            print(f"\n CRÉDITO (proxy HYG vs IEF)\n{sep}")
             print(f"  20d: {cr['hy_vs_ief_20d_pct']:+.2f}%   60d: {cr['hy_vs_ief_60d_pct']:+.2f}%"
                   f"   percentil: {cr['percentil_historico']:.0%}")
             print(f"  → {cr['lectura']}")
 
         dl = self.dolar()
         if dl:
-            print(f"\n💵 DÓLAR (DXY)\n{sep}")
+            print(f"\n DÓLAR (DXY)\n{sep}")
             print(f"  {dl['nivel']}  ({dl['vs_ma50_pct']:+.2f}% vs MA50)  → {dl['tendencia']}")
 
         corr = self.correlaciones_cross_asset()
         if corr:
-            print(f"\n🔗 CORRELACIONES 60d\n{sep}")
+            print(f"\n CORRELACIONES 60d\n{sep}")
             for k, v in corr.items():
                 print(f"  {k:<18} {v:+.2f}")
 
         reg = self.regimen_macro()
-        print(f"\n🎯 RÉGIMEN DE MERCADO\n{sep}")
+        print(f"\n RÉGIMEN DE MERCADO\n{sep}")
         for s in reg.señales:
             print(f"  {s}")
         print(f"\n  ▶ {reg.estado}  (score {reg.score:+.2f})")
