@@ -2,7 +2,7 @@
 
 **Sistema cuantitativo de trading y riesgo de mercado** que combina econofísica,
 machine learning y backtesting regulatorio sobre series financieras. Desarrollado
-desde una formación de grado en física.
+desde una formación en física.
 
 > **Aviso:** proyecto con fines educativos y de investigación. Los resultados de
 > backtest no garantizan rendimiento futuro. Nada de esto es asesoramiento
@@ -42,10 +42,11 @@ indicadores de econofísica. Sobre esa base:
         ├─► ML pipeline        features → RandomForest/XGBoost → backtest + DSR/PBO
         ├─► sistema de agentes Bull / Bear / Risk + régimen direccional
         ├─► varengine/         VaR·ES·GARCH·EVT·stress·factores·Basilea·diagnostics
-        └─► analisis_macro.py  curva de tasas · VIX term structure · crédito · DXY
+        ├─► analisis_macro.py  curva de tasas · VIX term structure · crédito · DXY
+        └─► qft_analysis.py    pozo de potencial cuántico de los retornos (experimental)
 
   ML + agentes ──► señales ──► paper_trading_bot (Alpaca + Binance testnet)
-  todo ──────────► server.py (FastAPI) + static/index.html (dashboard)
+  todo ──────────► server.py (FastAPI) + static/index.html (dashboard, 9 vistas)
 ```
 
 La idea de fondo: **los mercados no son gaussianos ni eficientes**. Tienen memoria
@@ -541,7 +542,7 @@ python analisis_macro.py     # reporte macro + gráfico (necesita internet)
 
 ## Dashboard web
 
-`server.py` — API FastAPI + `static/index.html` (dashboard de una sola página con
+`server.py` — API FastAPI + `static/index.html` (dashboard con menú lateral y
 Chart.js).
 
 ```bash
@@ -550,25 +551,48 @@ python server.py
 # → http://localhost:8000/docs   API interactiva (Swagger)
 ```
 
+**Menú lateral con 9 vistas:** Resumen · Riesgo (VaR) · Stress testing ·
+Burbujas (LPPLS) · Macro · Agentes · Portfolio · QFT (experimental) · Historial.
+Cada vista carga sus datos la primera vez que se abre. Arriba de todo, en todas
+las vistas, una **barra de señales** con la watchlist completa (20 acciones +
+20 criptos) que se recorre en paralelo y se precalienta al arrancar el server.
+Un selector de **auto-refresco** (Manual / 5 / 15 / 30 min) actualiza la barra y
+la vista activa; las vistas caras (VaR, stress, burbujas, QFT) no se
+auto-refrescan porque el server ya las cachea 30-60 min. Iconos de info con
+glosario en los paneles.
+
 | Endpoint | Qué hace |
 |---|---|
-| `POST /api/analizar` | análisis completo de un activo: stats, Hurst, régimen, señal ML, y microestructura de perpetuos para cripto |
+| `POST /api/analizar` | análisis de un activo: stats, Hurst, régimen, señal ML, y microestructura de perpetuos para cripto |
 | `POST /api/var` | **Value at Risk + backtesting regulatorio**: 5 métodos de VaR, ES, VaR componente, **modelo de factores** (equity), backtest walk-forward con Kupiec / Christoffersen / test de ES / semáforo de Basilea — usa `varengine/` |
+| `POST /api/stress` | **stress testing** de una cartera: replay histórico (2008, COVID, Terra/UST, FTX…), shocks hipotéticos y reverse stress — usa `varengine.stress` |
+| `GET /api/burbuja/{ticker}` | detección de burbuja **LPPLS** (Sornette): score, tiempo crítico `tc` y series para graficar |
+| `GET /api/qft/{ticker}` | **QFT (experimental)**: ajusta un pozo de potencial cuántico a la distribución de retornos — usa `qft_analysis.py` |
 | `GET /api/mercado` | **régimen macro / cross-asset**: curva de tasas, VIX term structure, spread de crédito, dólar, correlaciones — usa `analisis_macro.py` |
+| `GET /api/agentes` | debate Bull/Bear/Risk (hasta 10 activos) |
 | `POST /api/portfolio` | optimización de cartera por entropía máxima |
-| `GET /api/agentes` | debate Bull/Bear/Risk multi-activo |
+| `GET /api/señales` | señales rápidas; sin parámetros usa la watchlist de 40 |
 | `GET /api/macro` | sentimiento cripto: Fear & Greed, dominancia BTC, top-10 |
-| `GET /api/señales` | señales rápidas para varios tickers |
 | `GET /api/entrenar/{ticker}` | entrena el modelo ML en background |
 
-El panel **RIESGO — VALUE AT RISK** llama a `/api/var` y muestra la tabla de
-métodos, el VaR componente, los tests supervisores (VaR y ES) y el badge de zona
-Basilea con su multiplicador de capital. El panel **MACRO / RÉGIMEN DE MERCADO**
-llama a `/api/mercado` y se carga al abrir el dashboard.
-
-> Nota: `/api/analizar` sigue devolviendo un `var_95_diario` simple (percentil 5).
-> La versión rigurosa —con backtest y tests supervisores— es `varengine/` vía
+> Nota: `/api/analizar` devuelve un `var_95_diario` simple (percentil 5). La
+> versión rigurosa —con backtest y tests supervisores— es `varengine/` vía
 > `/api/var`.
+
+### QFT (experimental)
+
+`qft_analysis.py` — **exploratorio, no es un modelo de riesgo validado.** Trata al
+retorno como una partícula cuántica en un pozo de potencial: si la densidad de
+retornos es el estado fundamental de un hamiltoniano, la ecuación de Schrödinger
+estacionaria fija ese pozo. Ajusta una Student-t a la densidad y obtiene en forma
+cerrada el potencial efectivo `V(x)`, el potencial cuántico de Bohm, la rigidez
+del pozo (`omega`), qué tan blandas son las paredes (colas gruesas → el precio
+"escapa" del pozo) y la fuerza que empuja al centro. Referencias: Baaquie,
+*Quantum Finance* (2004); Choustova (2007).
+
+```bash
+python qft_analysis.py BTC-USD
+```
 
 ---
 
@@ -595,8 +619,9 @@ python paper_trading_bot_fixed.py
 
 ```
 econophysics-ml/
-├── data_layer.py                     capa de datos (Binance · CoinGecko · yfinance)
+├── data_layer.py                     capa de datos (Binance · CoinGecko · yfinance) + watchlist
 ├── analisis_macro.py                 régimen macro / cross-asset (curva, VIX, crédito, DXY)
+├── qft_analysis.py                   QFT experimental: pozo de potencial cuántico de los retornos
 ├── econofisica_sistema.py            econofísica corto plazo (Hurst, régimen, Tsallis)
 ├── econofisica_mediano_largo_plazo.py  DFA, LPPLS, RMT, ciclos FFT, cointegración
 ├── bot_trading_ml_econofisica.py     pipeline ML: features → modelo → backtest
@@ -649,7 +674,8 @@ pip install -r requirements.txt
 | Reproducir el hallazgo de VaR | `python var_analysis.py` |
 | …con datos reales + stress testing (acciones AR) | `python var_analysis.py --real` |
 | Régimen macro / cross-asset | `python analisis_macro.py` |
-| Levantar el dashboard | `python server.py` → http://localhost:8000 |
+| Pozo de potencial cuántico (experimental) | `python qft_analysis.py BTC-USD` |
+| Levantar el dashboard (9 vistas) | `python server.py` → http://localhost:8000 |
 | Backtest ML de un activo | `python bot_trading_ml_econofisica.py` |
 | Análisis econofísico corto plazo | `python econofisica_sistema.py` |
 | Análisis largo plazo (burbujas, RMT) | `python econofisica_mediano_largo_plazo.py` |
