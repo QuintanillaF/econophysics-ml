@@ -1147,6 +1147,7 @@ async function cargarSenales() {
 // ── Auto-refresco ───────────────────────────────────────────
 function configurarAutoRefresh() {
   const mins = parseInt($('auto-refresh').value, 10)
+  try { localStorage.setItem('autoRefresh', String(mins)) } catch (e) {}
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null }
   if (mins > 0) {
     autoRefreshTimer = setInterval(() => {
@@ -1154,6 +1155,15 @@ function configurarAutoRefresh() {
       refrescarVistaActual()
     }, mins * 60 * 1000)
   }
+}
+
+function restaurarAutoRefresh() {
+  let guardado = '0'
+  try { guardado = localStorage.getItem('autoRefresh') || '0' } catch (e) {}
+  if ([...$('auto-refresh').options].some(o => o.value === guardado)) {
+    $('auto-refresh').value = guardado
+  }
+  configurarAutoRefresh()
 }
 
 function refrescarVistaActual() {
@@ -2129,6 +2139,7 @@ window.onload = async () => {
     n.onclick = () => mostrarVista(n.dataset.view)
   })
   renderPortfolioTickers()
+  restaurarAutoRefresh()             // recuerda la elección de auto-refresco
   vistasCargadas.add('resumen')
 
   cargarSenales()                    // en segundo plano: ~40 activos, puede tardar
