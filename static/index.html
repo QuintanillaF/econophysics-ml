@@ -124,6 +124,11 @@
 
   .search-input:focus { border-color: var(--cyan); }
   .search-input::placeholder { color: var(--text2); }
+  .search-input.flash { animation: flash 0.5s ease; }
+  @keyframes flash {
+    0%   { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0,212,255,0.2); }
+    100% { border-color: var(--border); box-shadow: none; }
+  }
 
   select.search-input { cursor: pointer; }
 
@@ -162,23 +167,38 @@
   .signal-chip {
     background: var(--bg3);
     border: 1px solid var(--border);
+    border-left: 3px solid var(--text2);
     border-radius: 6px;
-    padding: 8px 14px;
+    padding: 8px 12px;
     white-space: nowrap;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
     display: flex;
     flex-direction: column;
     gap: 3px;
-    min-width: 130px;
+    min-width: 138px;
   }
 
   .signal-chip:hover { border-color: var(--cyan); background: var(--bg2); }
+  .signal-chip.up   { border-left-color: var(--green); }
+  .signal-chip.down { border-left-color: var(--red); }
 
-  .chip-ticker { font-weight: 700; font-size: 12px; color: white; }
-  .chip-price { font-size: 11px; color: var(--text2); }
-  .chip-signal { font-size: 14px; }
-  .chip-hurst { font-size: 10px; color: var(--text2); }
+  .chip-ticker { font-weight: 700; font-size: 12px; color: white; letter-spacing: 0.3px; }
+  .chip-price { font-size: 11px; color: var(--text); }
+  .chip-signal { font-size: 13px; font-weight: 700; }
+  .chip-rets { font-size: 10px; display: flex; gap: 8px; }
+  .chip-hurst { font-size: 9.5px; color: var(--text2); }
+  .chip-volbar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+  .chip-volbar > div { height: 100%; background: var(--yellow); }
+
+  .info-i {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 1px solid var(--text2); color: var(--text2);
+    font-size: 9px; font-style: italic; font-weight: 700;
+    cursor: help; margin-left: 4px; vertical-align: middle;
+  }
+  .info-i:hover { border-color: var(--cyan); color: var(--cyan); }
 
   /* ── Grid principal ─────────────────────────────────────── */
   .main-grid {
@@ -741,8 +761,9 @@
     <button class="nav-item" data-view="agentes"><span>Agentes</span></button>
     <button class="nav-item" data-view="portfolio"><span>Portfolio</span></button>
     <div class="nav-sep"></div>
+    <button class="nav-item" data-view="qft"><span>QFT (experimental)</span></button>
     <button class="nav-item" data-view="historial"><span>Historial</span></button>
-    <div class="nav-hint">Riesgo y Burbujas usan el ticker de la barra de arriba.</div>
+    <div class="nav-hint">Resumen, Riesgo, Burbujas y QFT usan el ticker de la barra de arriba.</div>
   </nav>
 
   <div class="content">
@@ -761,6 +782,17 @@
     </select>
     <button class="btn" onclick="analizarActual()">ANALIZAR</button>
     <button class="btn ghost" onclick="entrenarModelo()">ENTRENAR ML</button>
+    <span style="flex:1"></span>
+    <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:6px;white-space:nowrap">
+      Auto-refresco
+      <select class="search-input" id="auto-refresh" style="max-width:110px;padding:6px 8px;font-size:11px"
+              onchange="configurarAutoRefresh()">
+        <option value="0" selected>Manual</option>
+        <option value="5">5 min</option>
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+      </select>
+    </label>
   </div>
 
   <!-- ── BARRA DE SEÑALES (compartida, 20 acciones + 20 cripto) ── -->
@@ -931,6 +963,29 @@
     </div>
   </section>
 
+  <!-- ══════ VISTA: QFT (EXPERIMENTAL) ══════ -->
+  <section class="view" id="view-qft" hidden>
+    <div class="view-title">QFT — pozo de potencial cuántico
+      <span style="font-size:10px;color:var(--yellow);border:1px solid var(--yellow);border-radius:3px;padding:1px 6px;margin-left:8px">EXPERIMENTAL</span>
+    </div>
+    <div class="view-sub">
+      Trata al retorno como una partícula cuántica en un pozo de potencial: si la
+      densidad de retornos es el estado fundamental de un hamiltoniano, la ecuación
+      de Schrödinger fija ese pozo. <strong>No es un modelo de riesgo validado</strong> —
+      es exploración. Usa el ticker de la barra de arriba.
+    </div>
+    <div style="margin-bottom:14px">
+      <button class="btn" onclick="analisisQFT()">CALCULAR POZO CUÁNTICO</button>
+    </div>
+    <div class="card">
+      <div id="qft-content">
+        <div style="color:var(--text2);font-size:12px;padding:12px">
+          Elegí un ticker arriba y presioná CALCULAR.
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ══════ VISTA: HISTORIAL ══════ -->
   <section class="view" id="view-historial" hidden>
     <div class="view-title">Historial de señales</div>
@@ -954,14 +1009,50 @@
 const API = 'http://localhost:8000/api'
 let chartInstance = null
 let bubbleChart = null
+let qftChart = null
 let chartData = null
 let chartMode = 'precio'
 let portfolioTickers = ['AAPL', 'NVDA', 'BTC-USD', 'ETH-USD']
 let vistaActual = 'resumen'
+let autoRefreshTimer = null
 const vistasCargadas = new Set()
 
 // ── Utilidades ──────────────────────────────────────────────
 const $ = id => document.getElementById(id)
+
+// formato de números legible
+function fmtNum(v, dec = 2) {
+  if (v == null || isNaN(v)) return '—'
+  const a = Math.abs(v)
+  if (a >= 1e9) return (v / 1e9).toFixed(2) + 'B'
+  if (a >= 1e6) return (v / 1e6).toFixed(2) + 'M'
+  if (a >= 1e3) return v.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+  return v.toLocaleString('es-AR', { maximumFractionDigits: dec, minimumFractionDigits: a < 1 && a > 0 ? Math.min(dec, 4) : 0 })
+}
+function fmtMoney(v) { return v == null || isNaN(v) ? '—' : '$' + fmtNum(v) }
+function fmtPctSigned(v, dec = 2) {
+  if (v == null || isNaN(v)) return '—'
+  return (v >= 0 ? '+' : '') + v.toFixed(dec) + '%'
+}
+
+// glosario para los tooltips (icono de info)
+const GLOSARIO = {
+  'H': 'Exponente de Hurst. H>0.55 = tendencias persistentes (trend following); H<0.45 = reversión a la media; H≈0.5 = ruido.',
+  'CALMA/ESTRÉS': 'Régimen de volatilidad: ESTRÉS cuando la volatilidad de 21 días supera su mediana histórica.',
+  'VaR': 'Value at Risk: la pérdida que no se supera con la confianza dada (99%), en 1 día. Se reporta como número positivo.',
+  'ES': 'Expected Shortfall: la pérdida promedio los días en que se supera el VaR. La medida que usa Basilea III / FRTB.',
+  'Kupiec': 'Test de cobertura: ¿el número de excepciones es el esperado? Rechaza si el modelo subestima el riesgo.',
+  'Christoffersen': 'Test de independencia: ¿las excepciones están repartidas o agrupadas? Rechaza si se agrupan.',
+  'Z2': 'Estadístico del test de ES (Acerbi-Székely). Z2<0 significa que el ES subestima las pérdidas de cola.',
+  'Zona Basilea': 'Semáforo supervisor: VERDE (0-4 excepciones/250d, mult. 3.00), AMARILLA (5-9, 3.40-3.85), ROJA (≥10, 4.00).',
+  'omega': 'Rigidez del pozo de potencial cuántico. Alto = reversión a la media fuerte.',
+  'nu': 'Grados de libertad de la Student-t ajustada a los retornos. Bajo (3-5) = colas gruesas.',
+  'tc': 'Tiempo crítico del modelo LPPLS: la fecha estimada del cambio de régimen o crash.',
+}
+function info(clave) {
+  const t = (GLOSARIO[clave] || '').replace(/"/g, '&quot;')
+  return `<span class="info-i" title="${t}">i</span>`
+}
 
 // ── Navegación entre vistas ─────────────────────────────────
 function mostrarVista(nombre) {
@@ -979,13 +1070,17 @@ function mostrarVista(nombre) {
   // Chart.js necesita re-medir si se renderizó en un contenedor oculto
   if (nombre === 'resumen' && chartInstance) setTimeout(() => chartInstance.resize(), 30)
   if (nombre === 'burbujas' && bubbleChart) setTimeout(() => bubbleChart.resize(), 30)
+  if (nombre === 'qft' && qftChart) setTimeout(() => qftChart.resize(), 30)
 }
 
-// El botón ANALIZAR de la barra superior actúa según la vista activa
+// El botón ANALIZAR (y el click en un chip) actúa según la vista activa,
+// sin cambiar de pantalla. En vistas que no usan un ticker suelto
+// (macro / agentes / portfolio / stress / historial) solo deja el ticker cargado.
 function analizarActual() {
   if (vistaActual === 'riesgo') analizarVaR()
   else if (vistaActual === 'burbujas') detectarBurbuja()
-  else { mostrarVista('resumen'); analizarTicker() }
+  else if (vistaActual === 'qft') analisisQFT()
+  else if (vistaActual === 'resumen') analizarTicker()
 }
 
 function colorClass(val, thresholds) {
@@ -1010,35 +1105,63 @@ async function cargarSenales() {
 
     for (const s of data.señales) {
       const div = document.createElement('div')
-      div.className = 'signal-chip'
+      const dir = s.señal === '↑' ? 'up' : s.señal === '↓' ? 'down' : ''
+      div.className = 'signal-chip ' + dir
       div.onclick = () => {
-        $('ticker-input').value = s.ticker
-        mostrarVista('resumen')
-        analizarTicker()
+        const inp = $('ticker-input')
+        inp.value = s.ticker
+        inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash')
+        analizarActual()   // corre la acción de la vista actual; no cambia de pantalla
       }
-      const señalColor = s.señal === '↑' ? 'var(--green)' :
-                         s.señal === '↓' ? 'var(--red)' : 'var(--text2)'
-      const retColor = s.ret_1m >= 0 ? 'var(--green)' : 'var(--red)'
+      const sc = dir === 'up' ? 'var(--green)' : dir === 'down' ? 'var(--red)' : 'var(--text2)'
+      const c1s = s.ret_1s >= 0 ? 'var(--green)' : 'var(--red)'
+      const c1m = s.ret_1m >= 0 ? 'var(--green)' : 'var(--red)'
+      const volPct = Math.min(100, (s.vol_anual || 0) / 1.2)   // ~120% vol = barra llena
 
       div.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span class="chip-ticker">${s.ticker}</span>
-          <span class="chip-signal" style="color:${señalColor}">${s.señal}</span>
+          <span class="chip-signal" style="color:${sc}">${s.señal}</span>
         </div>
-        <span class="chip-price">$${s.precio.toLocaleString()}</span>
-        <span style="font-size:10px;color:${retColor}">${formatPct(s.ret_1m)} (1m)</span>
-        <span class="chip-hurst">H=${s.hurst} │ ${s.regimen}</span>
+        <span class="chip-price">${fmtMoney(s.precio)}</span>
+        <div class="chip-rets">
+          <span style="color:${c1s}" title="retorno 5 días">${fmtPctSigned(s.ret_1s)} 5d</span>
+          <span style="color:${c1m}" title="retorno 1 mes">${fmtPctSigned(s.ret_1m)} 1m</span>
+        </div>
+        <span class="chip-hurst">H ${s.hurst} · ${s.regimen} · vol ${(s.vol_anual || 0).toFixed(0)}%</span>
+        <div class="chip-volbar"><div style="width:${volPct}%"></div></div>
       `
       bar.appendChild(div)
     }
 
-    $('last-update').textContent =
-      `Actualizado ${new Date().toLocaleTimeString()}`
+    const upd = $('last-update')
+    if (upd) upd.textContent = `Señales: ${new Date().toLocaleTimeString()}`
 
   } catch (e) {
     $('signals-bar').innerHTML =
       '<div style="color:var(--text2);font-size:11px;padding:8px">Servidor no disponible — corré python server.py</div>'
   }
+}
+
+// ── Auto-refresco ───────────────────────────────────────────
+function configurarAutoRefresh() {
+  const mins = parseInt($('auto-refresh').value, 10)
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null }
+  if (mins > 0) {
+    autoRefreshTimer = setInterval(() => {
+      cargarSenales()
+      refrescarVistaActual()
+    }, mins * 60 * 1000)
+  }
+}
+
+function refrescarVistaActual() {
+  const v = vistaActual
+  if (v === 'resumen' && $('ticker-input').value) analizarTicker()
+  else if (v === 'macro') cargarMacro()
+  else if (v === 'historial') cargarTrades()
+  else if (v === 'agentes' && $('agentes-content').querySelector('table')) cargarAgentes()
+  // riesgo / burbujas / qft / stress: cálculos caros, no se auto-refrescan (caché del server 30-60 min)
 }
 
 // ── Analizar ticker ─────────────────────────────────────────
@@ -1139,7 +1262,7 @@ function renderStats(d) {
     </div>
     <div style="margin-top:14px">
       <span class="regimen-badge ${reg.estado === 'CALMA' ? 'calma' : 'estres'}">
-        ${reg.estado === 'CALMA' ? '' : ''} ${reg.estado}
+        ${reg.estado} ${info('CALMA/ESTRÉS')}
         &nbsp;│&nbsp; Vol ${reg.vol_actual.toFixed(1)}%
         (umbral ${reg.vol_mediana.toFixed(1)}%)
       </span>
@@ -1190,7 +1313,7 @@ function renderHurst(d) {
                d.hurst.color === 'orange'? 'var(--yellow)' : 'var(--text2)'
 
   $('card-hurst').innerHTML = `
-    <div class="card-title">EXPONENTE DE HURST</div>
+    <div class="card-title">EXPONENTE DE HURST ${info('H')}</div>
     <div class="hurst-gauge">
       <div class="hurst-value" style="color:${col}">${H.toFixed(3)}</div>
       <div style="width:100%">
@@ -1472,7 +1595,7 @@ function renderVaR(d) {
 
   let metodos = `
     <table class="var-table">
-      <tr><th>Método</th><th>VaR ${(d.confianza * 100).toFixed(0)}%</th><th>Expected Shortfall</th><th>VaR ($)</th></tr>`
+      <tr><th>Método</th><th>VaR ${(d.confianza * 100).toFixed(0)}% ${info('VaR')}</th><th>Expected Shortfall ${info('ES')}</th><th>VaR ($)</th></tr>`
   for (const m of d.metodos) {
     metodos += `<tr>
       <td>${m.metodo}</td>
@@ -1486,7 +1609,7 @@ function renderVaR(d) {
   const verdict = (ok) => `<span class="var-verdict ${ok ? 'ok' : 'fail'}">${ok ? 'pasa' : 'RECHAZA'}</span>`
   let backtests = `
     <div class="var-bt-row" style="color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-      <div>Modelo</div><div>Excepciones</div><div>Kupiec / Christoffersen</div><div>ES (Acerbi-Székely)</div><div>Zona Basilea</div>
+      <div>Modelo</div><div>Excepciones</div><div>Kupiec ${info('Kupiec')} / Christoffersen ${info('Christoffersen')}</div><div>ES ${info('Z2')}</div><div>Zona Basilea ${info('Zona Basilea')}</div>
     </div>`
   for (const bt of d.backtests) {
     const zona = bt.basel.zona.toLowerCase()
@@ -1813,6 +1936,79 @@ function renderBurbuja(d) {
       scales: {
         x: { ticks: { color: '#5a7a99', maxTicksLimit: 8, font: { size: 9 } }, grid: { color: '#1e2a38' } },
         y: { ticks: { color: '#5a7a99', font: { size: 9 } }, grid: { color: '#1e2a38' } },
+      }
+    }
+  })
+}
+
+// ── QFT (experimental) ──────────────────────────────────────
+async function analisisQFT() {
+  const ticker = $('ticker-input').value.trim().toUpperCase()
+  const periodo = $('periodo-select').value
+  if (!ticker) return
+  mostrarVista('qft')
+  $('qft-content').innerHTML =
+    `<div class="loading"><div class="spinner"></div> Ajustando el pozo de potencial cuántico de ${ticker}...</div>`
+  try {
+    const r = await fetch(`${API}/qft/${encodeURIComponent(ticker)}?periodo=${periodo}`)
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Error del servidor') }
+    renderQFT(await r.json())
+  } catch (e) {
+    $('qft-content').innerHTML = `<div class="error-msg">${e.message}</div>`
+  }
+}
+
+function renderQFT(d) {
+  const sc = d['señal'].startsWith('REVERSIÓN BAJISTA') ? 'var(--red)'
+           : d['señal'].startsWith('REVERSIÓN ALCISTA') ? 'var(--green)' : 'var(--text2)'
+
+  $('qft-content').innerHTML = `
+    <div class="card-title">POZO CUÁNTICO — ${d.ticker}
+      <span style="color:var(--text2);font-weight:400;font-size:11px">&nbsp;│&nbsp; ${d.n_obs} retornos</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">
+      <span class="zona-badge" style="background:var(--bg3);color:${sc};border:1px solid var(--border)">${d['señal']}</span>
+    </div>
+    <table class="var-table" style="max-width:520px;margin-bottom:16px">
+      <tr><th>Métrica</th><th>Valor</th><th>Lectura</th></tr>
+      <tr><td>omega ${info('omega')}</td><td>${d.omega.toFixed(2)}</td><td style="color:var(--text2)">${d.lectura.rigidez}</td></tr>
+      <tr><td>nu (Student-t) ${info('nu')}</td><td>${d.nu.toFixed(1)}</td><td style="color:var(--text2)">${d.lectura.paredes}</td></tr>
+      <tr><td>confinamiento</td><td>${d.confinamiento.toFixed(2)}</td><td style="color:var(--text2)">1 = gaussiano · &lt;0.2 = paredes muy blandas</td></tr>
+      <tr><td>posición (mov. 5d)</td><td>${d.x_now_sigma >= 0 ? '+' : ''}${d.x_now_sigma.toFixed(2)} σ</td><td style="color:var(--text2)">${d.lectura.posicion}</td></tr>
+      <tr><td>fuerza cuántica</td><td>${d.fuerza_cuantica >= 0 ? '+' : ''}${d.fuerza_cuantica.toFixed(2)}</td><td style="color:var(--text2)">−dV/dx: empuja al centro</td></tr>
+      <tr><td>niveles E_n</td><td colspan="2" style="color:var(--text2)">${d.niveles_energia.join(' · ')}</td></tr>
+    </table>
+    <div class="chart-container" style="height:320px"><canvas id="qft-chart"></canvas></div>
+    <div style="font-size:10px;color:var(--text2);margin-top:8px;line-height:1.5">
+      Densidad de retornos (barras) · potencial efectivo V(x) del pozo (línea) ·
+      parábola del oscilador equivalente (punteada). Donde V(x) se aplana en las alas
+      mientras la parábola sigue subiendo = colas gruesas, el precio "escapa" del pozo.
+    </div>`
+
+  const c = d.curvas
+  if (qftChart) qftChart.destroy()
+  qftChart = new Chart($('qft-chart').getContext('2d'), {
+    data: {
+      labels: c.x,
+      datasets: [
+        { type: 'bar', label: 'densidad', data: c.densidad, backgroundColor: 'rgba(77,159,255,0.25)',
+          borderWidth: 0, yAxisID: 'yd', order: 3, barPercentage: 1, categoryPercentage: 1 },
+        { type: 'line', label: 'V(x) — pozo', data: c.potencial, borderColor: '#00d4ff',
+          borderWidth: 1.8, pointRadius: 0, tension: 0.1, yAxisID: 'yv', order: 1 },
+        { type: 'line', label: 'oscilador equiv.', data: c.potencial_qho, borderColor: '#f0b429',
+          borderWidth: 1.3, borderDash: [5,3], pointRadius: 0, tension: 0.1, yAxisID: 'yv', order: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#c9d5e0', font: { size: 10 } } } },
+      scales: {
+        x: { title: { display: true, text: 'retorno (sigmas)', color: '#5a7a99', font: { size: 9 } },
+             ticks: { color: '#5a7a99', maxTicksLimit: 9, font: { size: 9 },
+                      callback: (v, i) => Number(c.x[i]).toFixed(1) }, grid: { color: '#1e2a38' } },
+        yv: { position: 'left', title: { display: true, text: 'V(x)', color: '#5a7a99', font: { size: 9 } },
+              ticks: { color: '#5a7a99', font: { size: 9 } }, grid: { color: '#1e2a38' } },
+        yd: { position: 'right', ticks: { display: false }, grid: { display: false } },
       }
     }
   })

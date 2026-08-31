@@ -73,10 +73,10 @@ class VaRRequest(BaseModel):
 _cache: dict = {}
 CACHE_MIN = 15
 
-def cache_ok(key: str) -> bool:
+def cache_ok(key: str, mins: float = CACHE_MIN) -> bool:
     if key not in _cache: return False
-    diff = (datetime.now() - datetime.fromisoformat(_cache[key].get('timestamp','2000-01-01'))).seconds/60
-    return diff < CACHE_MIN
+    edad = (datetime.now() - datetime.fromisoformat(_cache[key].get('timestamp','2000-01-01'))).total_seconds() / 60
+    return edad < mins
 
 # ── ML helpers (inline, sin imports externos complejos) ───────
 def calcular_features_inline(df: pd.DataFrame) -> pd.DataFrame:
@@ -155,7 +155,7 @@ async def analizar_activo(req: AnalisisRequest):
     ticker = req.ticker.upper().strip()
     key    = f"{ticker}_{req.periodo}"
 
-    if cache_ok(key): return _cache[key]
+    if cache_ok(key, 4): return _cache[key]
 
     dl   = get_data_layer()
     info = normalizar_ticker(ticker)
@@ -273,7 +273,7 @@ def get_mercado():
     con TTL largo.
     """
     key = "mercado_macro"
-    if cache_ok(key):
+    if cache_ok(key, 30):
         return _cache[key]
     from analisis_macro import AnalisisMacro
 
@@ -297,7 +297,7 @@ def get_señales(tickers: str = ""):
     lista = lista[:60]
 
     key = "senales_" + ",".join(lista)
-    if cache_ok(key):
+    if cache_ok(key, 4):
         return _cache[key]
 
     def _una_senal(ticker: str):
@@ -401,7 +401,7 @@ def analizar_var(req: VaRRequest):
 
     ticker = req.ticker.upper().strip()
     key = f"var_{ticker}_{req.periodo}_{req.confianza}_{req.ventana}_{req.incluir_t}"
-    if cache_ok(key):
+    if cache_ok(key, 60):
         return _cache[key]
 
     dl = get_data_layer()
@@ -562,7 +562,7 @@ def agentes_señales(tickers: str = "AAPL,NVDA,MSFT,TSLA,AMZN,META,BTC-USD,ETH-U
     from sistema_agentes import SistemaAgentes
     lista = [t.strip().upper() for t in tickers.split(",") if t.strip()][:10]
     key = "agentes_" + ",".join(lista)
-    if cache_ok(key):
+    if cache_ok(key, 10):
         return _cache[key]
     try:
         sistema = SistemaAgentes(lista, capital_inicial=100_000)
@@ -593,7 +593,7 @@ def stress_testing(req: StressRequest):
 
     tickers = [t.upper().strip() for t in req.tickers][:8]
     key = f"stress_{'_'.join(sorted(tickers))}_{req.periodo}_{req.valor}"
-    if cache_ok(key):
+    if cache_ok(key, 60):
         return _cache[key]
 
     dl = get_data_layer()
@@ -653,7 +653,7 @@ def detectar_burbuja(ticker: str, periodo: str = "2y"):
     """
     ticker = ticker.upper().strip()
     key = f"burbuja_{ticker}_{periodo}"
-    if cache_ok(key):
+    if cache_ok(key, 60):
         return _cache[key]
 
     from econofisica_mediano_largo_plazo import DetectorBurbuja
@@ -691,6 +691,41 @@ def detectar_burbuja(ticker: str, periodo: str = "2y"):
             'lppls':   [round(float(c), 4) for c in curva[-tail:]] if curva is not None else [],
         },
     }
+    _cache[key] = resultado
+    return resultado
+
+
+@app.get("/api/qft/{ticker}")
+def analisis_qft(ticker: str, periodo: str = "2y"):
+    """QFT / mecánica cuántica aplicada al mercado — EXPERIMENTAL.
+
+    Ajusta un pozo de potencial cuántico a la distribución de retornos: rigidez
+    del pozo (omega), qué tan blandas son las paredes (colas gruesas), dónde está
+    el precio en el pozo y la fuerza cuántica que lo empuja al centro.
+    """
+    ticker = ticker.upper().strip()
+    key = f"qft_{ticker}_{periodo}"
+    if cache_ok(key, 30):
+        return _cache[key]
+
+    from qft_analysis import quantum_well_analysis
+
+    dl = get_data_layer()
+    df = dl.get_ohlcv(ticker, 'largo', periodo)
+    if df.empty:
+        raise HTTPException(404, f"Sin datos para {ticker}")
+    c = df['close'].squeeze().dropna()
+    r = np.log(c / c.shift(1)).dropna().to_numpy().ravel()
+    if r.size < 150:
+        raise HTTPException(400, f"Historia insuficiente ({r.size} retornos, se necesitan >= 150)")
+
+    try:
+        res = quantum_well_analysis(r)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    resultado = {'ticker': ticker, 'periodo': periodo,
+                 'timestamp': datetime.now().isoformat(), **res}
     _cache[key] = resultado
     return resultado
 
