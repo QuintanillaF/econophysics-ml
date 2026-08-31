@@ -579,16 +579,44 @@ glosario en los paneles.
 > versión rigurosa —con backtest y tests supervisores— es `varengine/` vía
 > `/api/var`.
 
-### QFT (experimental)
+### QFT (experimental / en desarrollo)
 
-`qft_analysis.py` — **exploratorio, no es un modelo de riesgo validado.** Trata al
-retorno como una partícula cuántica en un pozo de potencial: si la densidad de
-retornos es el estado fundamental de un hamiltoniano, la ecuación de Schrödinger
-estacionaria fija ese pozo. Ajusta una Student-t a la densidad y obtiene en forma
-cerrada el potencial efectivo `V(x)`, el potencial cuántico de Bohm, la rigidez
-del pozo (`omega`), qué tan blandas son las paredes (colas gruesas → el precio
-"escapa" del pozo) y la fuerza que empuja al centro. Referencias: Baaquie,
-*Quantum Finance* (2004); Choustova (2007).
+`qft_analysis.py` — **exploratorio, no es un modelo de riesgo validado ni se usa
+en un banco.** Está separado del resto a propósito. Trata al retorno como una
+partícula cuántica en un pozo de potencial.
+
+**Pozo estático.** Si la densidad de retornos `rho(x)` es el estado fundamental
+`|psi_0|^2` de un hamiltoniano `H = -½ d²/dx² + V(x)`, la ecuación de Schrödinger
+estacionaria fija el potencial a partir de `R = sqrt(rho)`:
+
+```
+-½ R''(x) + V(x) R(x) = E_0 R(x)   =>   V(x) = E_0 + ½ · R''(x)/R(x)
+```
+
+Se ajusta una Student-t a la densidad (con `nu → ∞` se recupera la gaussiana) y
+todo sale en forma cerrada: el potencial efectivo `V(x)`, el potencial cuántico
+de Bohm `Q(x) = -½ R''/R`, la rigidez del pozo `omega` (curvatura de `V` en el
+fondo), qué tan blandas son las paredes (para la Student-t `V(x) → 0` en las alas
+— no hay pared que confine, la firma de las colas gruesas), la probabilidad de un
+movimiento de 3σ vs una gaussiana, y la fuerza `-dV/dx` que empuja al centro.
+
+**Evolución temporal (en desarrollo).** Se diagonaliza `H` y se evoluciona la
+posición actual como una difusión en el pozo — la ecuación de Smoluchowski, que
+es `H` en tiempo imaginario:
+
+```
+P(x, t | x_0) = [phi_0(x)/phi_0(x_0)] · Σ_n phi_n(x) phi_n(x_0) e^{-(E_n - E_0) t}
+```
+
+El gap de energía `E_1 - E_0` da el modo de relajación más lento; su inversa es el
+tiempo de reversión. El reloj tiempo→días se calibra contra la vida media de un
+AR(1) del movimiento de 5 días — **esa calibración es aproximada**, de ahí lo de
+"en desarrollo". La salida es la media y la banda del movimiento esperado a 1 / 5
+/ 20 días, decayendo hacia el equilibrio del pozo.
+
+Referencias: Baaquie, *Quantum Finance* (2004); Choustova, *Bohmian mechanics for
+financial processes* (2007); Risken, *The Fokker-Planck Equation* (1989) para la
+conexión Schrödinger ↔ Smoluchowski.
 
 ```bash
 python qft_analysis.py BTC-USD

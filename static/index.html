@@ -1010,6 +1010,7 @@ const API = 'http://localhost:8000/api'
 let chartInstance = null
 let bubbleChart = null
 let qftChart = null
+let qftFcChart = null
 let chartData = null
 let chartMode = 'precio'
 let portfolioTickers = ['AAPL', 'NVDA', 'BTC-USD', 'ETH-USD']
@@ -1959,6 +1960,7 @@ async function analisisQFT() {
 }
 
 function renderQFT(d) {
+  const p = d.propagador
   const sc = d['señal'].startsWith('REVERSIÓN BAJISTA') ? 'var(--red)'
            : d['señal'].startsWith('REVERSIÓN ALCISTA') ? 'var(--green)' : 'var(--text2)'
 
@@ -1969,21 +1971,42 @@ function renderQFT(d) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px">
       <span class="zona-badge" style="background:var(--bg3);color:${sc};border:1px solid var(--border)">${d['señal']}</span>
     </div>
-    <table class="var-table" style="max-width:520px;margin-bottom:16px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Pozo estático</div>
+    <table class="var-table" style="max-width:560px;margin-bottom:16px">
       <tr><th>Métrica</th><th>Valor</th><th>Lectura</th></tr>
       <tr><td>omega ${info('omega')}</td><td>${d.omega.toFixed(2)}</td><td style="color:var(--text2)">${d.lectura.rigidez}</td></tr>
       <tr><td>nu (Student-t) ${info('nu')}</td><td>${d.nu.toFixed(1)}</td><td style="color:var(--text2)">${d.lectura.paredes}</td></tr>
       <tr><td>confinamiento</td><td>${d.confinamiento.toFixed(2)}</td><td style="color:var(--text2)">1 = gaussiano · &lt;0.2 = paredes muy blandas</td></tr>
+      <tr><td>P(movimiento 3σ) vs gaussiana</td><td>${d.prob_mov_3sigma_vs_gauss}×</td><td style="color:var(--text2)">el pozo asigna ${d.prob_mov_3sigma_vs_gauss}× más probabilidad a un salto de 3σ</td></tr>
       <tr><td>posición (mov. 5d)</td><td>${d.x_now_sigma >= 0 ? '+' : ''}${d.x_now_sigma.toFixed(2)} σ</td><td style="color:var(--text2)">${d.lectura.posicion}</td></tr>
       <tr><td>fuerza cuántica</td><td>${d.fuerza_cuantica >= 0 ? '+' : ''}${d.fuerza_cuantica.toFixed(2)}</td><td style="color:var(--text2)">−dV/dx: empuja al centro</td></tr>
       <tr><td>niveles E_n</td><td colspan="2" style="color:var(--text2)">${d.niveles_energia.join(' · ')}</td></tr>
     </table>
-    <div class="chart-container" style="height:320px"><canvas id="qft-chart"></canvas></div>
-    <div style="font-size:10px;color:var(--text2);margin-top:8px;line-height:1.5">
+    <div class="chart-container" style="height:300px"><canvas id="qft-chart"></canvas></div>
+    <div style="font-size:10px;color:var(--text2);margin:8px 0 20px;line-height:1.5">
       Densidad de retornos (barras) · potencial efectivo V(x) del pozo (línea) ·
       parábola del oscilador equivalente (punteada). Donde V(x) se aplana en las alas
       mientras la parábola sigue subiendo = colas gruesas, el precio "escapa" del pozo.
-    </div>`
+    </div>
+    ${p ? `
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">
+        Evolución temporal
+        <span style="font-size:9px;color:var(--yellow);border:1px solid var(--yellow);border-radius:3px;padding:1px 5px;margin-left:6px">EN DESARROLLO</span>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px">
+        gap de energía E₁−E₀ = ${p.energia_gap} · vida media de reversión ≈ <strong style="color:var(--text)">${p.reversion_half_dias} días</strong>
+        (calibrada con un AR(1) del movimiento de 5 días, φ=${p.ar1_mov5d})
+      </div>
+      <table class="var-table" style="max-width:420px;margin-bottom:12px">
+        <tr><th>Horizonte</th><th>Media esperada</th><th>Banda ±1σ</th></tr>
+        ${p.pronostico.map(h => `<tr><td>${h.dias} días</td><td>${h.media_sigma >= 0 ? '+' : ''}${h.media_sigma.toFixed(2)} σ</td><td>±${h.banda_sigma.toFixed(2)} σ</td></tr>`).join('')}
+      </table>
+      <div class="chart-container" style="height:220px"><canvas id="qft-fc-chart"></canvas></div>
+      <div style="font-size:10px;color:var(--text2);margin-top:8px;line-height:1.5">
+        Partiendo concentrado en la posición actual, la distribución del movimiento
+        se ensancha y su media decae hacia el equilibrio del pozo. La calibración
+        tiempo→días es aproximada — de ahí lo de "en desarrollo".
+      </div>` : ''}`
 
   const c = d.curvas
   if (qftChart) qftChart.destroy()
@@ -2012,6 +2035,33 @@ function renderQFT(d) {
       }
     }
   })
+
+  if (qftFcChart) { qftFcChart.destroy(); qftFcChart = null }
+  if (p && $('qft-fc-chart')) {
+    qftFcChart = new Chart($('qft-fc-chart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: c.x,
+        datasets: [
+          { label: 'equilibrio del pozo', data: c.equilibrio, borderColor: '#5a7a99',
+            borderWidth: 1, borderDash: [4,3], pointRadius: 0, tension: 0.15 },
+          { label: 'pronóstico 1 día', data: c.dist_1d, borderColor: '#00d4ff',
+            borderWidth: 1.6, pointRadius: 0, tension: 0.15, fill: false },
+          { label: 'pronóstico 20 días', data: c.dist_20d, borderColor: '#4d9fff',
+            borderWidth: 1.4, pointRadius: 0, tension: 0.15 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#c9d5e0', font: { size: 9 } } } },
+        scales: {
+          x: { ticks: { color: '#5a7a99', maxTicksLimit: 9, font: { size: 9 },
+                        callback: (v, i) => Number(c.x[i]).toFixed(1) }, grid: { color: '#1e2a38' } },
+          y: { ticks: { color: '#5a7a99', font: { size: 9 } }, grid: { color: '#1e2a38' } },
+        }
+      }
+    })
+  }
 }
 
 // ── Stress testing ──────────────────────────────────────────
