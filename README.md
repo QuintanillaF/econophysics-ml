@@ -80,10 +80,23 @@ regresión sobre escalas logarítmicas, en `econofisica_mediano_largo_plazo.py`.
 
 ### DFA — Detrended Fluctuation Analysis
 
-Variante del cálculo de H que **quita la tendencia local** de cada ventana antes
-de medir la fluctuación. Es más estable que R/S cuando la serie tiene tendencias
-suaves o no estacionariedad, así que sirve como segunda opinión sobre H
-(`AnalisisHurst.calcular_dfa`).
+Otra forma de estimar la memoria de largo plazo, más robusta que R/S cuando la
+serie tiene tendencias o no es estacionaria. El procedimiento:
+
+1. **Integrar** la serie de retornos: `Y(k) = Σ_{i≤k} (r_i − r̄)` — se pasa de
+   retornos a un "camino" acumulado.
+2. Partir `Y` en ventanas de tamaño `n`.
+3. En **cada ventana**, ajustar una recta (o polinomio) por mínimos cuadrados y
+   **restarla** — eso quita la tendencia local, que es lo que contamina a R/S.
+4. Calcular la fluctuación `F(n)` = raíz del error cuadrático medio de los
+   residuos, promediada sobre todas las ventanas.
+5. Repetir para varios `n` y ajustar `log F(n) = α · log n + c`.
+
+El exponente `α` es el análogo de Hurst: `α ≈ 0.5` sin memoria (ruido blanco),
+`α > 0.5` persistente, `α < 0.5` anti-persistente, `α ≈ 1` ruido 1/f, `α > 1`
+no estacionario. Para retornos financieros suele dar `α ≈ 0.5–0.6`. Sirve como
+**segunda opinión sobre H**: si R/S y DFA discrepan mucho, la señal de memoria es
+frágil. Implementado en `AnalisisHurst.calcular_dfa` (`econofisica_mediano_largo_plazo.py`).
 
 ### Dimensión fractal
 
@@ -502,7 +515,7 @@ python regimen_direccional.py     # versión adaptativa por régimen
 | Crypto, corto/mediano plazo | Binance REST | sin delay, precio exacto, klines de 1h/1d |
 | Crypto, largo plazo | yfinance | más historia disponible |
 | Acciones / ETFs | yfinance | Binance no tiene equity |
-| Macro crypto (Fear & Greed, dominancia BTC) | CoinGecko + alternative.me | — |
+| Macro crypto (Fear & Greed, dominancia BTC) | CoinGecko + alternative.me | sentimiento de todo el mercado cripto, no de una moneda: lo usan el sistema de agentes y `/api/macro` como filtro de régimen |
 
 Incluye caché por TTL según horizonte, normalización de tickers
 (`BTCUSDT` ↔ `BTC-USD` ↔ `bitcoin`), y señales de order book / trades grandes
