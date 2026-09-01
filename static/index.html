@@ -200,6 +200,23 @@
   }
   .info-i:hover { border-color: var(--cyan); color: var(--cyan); }
 
+  /* formulario del bot */
+  .bot-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+  .bot-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text2); }
+  .bot-form input {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;
+    padding: 7px 10px; color: white; font-family: var(--font-mono); font-size: 12px; outline: none;
+  }
+  .bot-form input:focus { border-color: var(--cyan); }
+  @media (max-width: 700px) { .bot-form { grid-template-columns: 1fr; } }
+
+  .bot-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+    border-radius: 4px; font-size: 12px; font-weight: 700;
+  }
+  .bot-badge.on  { background: rgba(46,204,113,0.12); color: var(--green); border: 1px solid rgba(46,204,113,0.3); }
+  .bot-badge.off { background: rgba(90,122,153,0.12); color: var(--text2); border: 1px solid var(--border); }
+
   /* ── Grid principal ─────────────────────────────────────── */
   .main-grid {
     display: grid;
@@ -762,6 +779,8 @@
     <button class="nav-item" data-view="portfolio"><span>Portfolio</span></button>
     <div class="nav-sep"></div>
     <button class="nav-item" data-view="qft"><span>QFT (experimental)</span></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item" data-view="bot"><span>Bot (paper)</span></button>
     <button class="nav-item" data-view="historial"><span>Historial</span></button>
     <div class="nav-hint">Resumen, Riesgo, Burbujas y QFT usan el ticker de la barra de arriba.</div>
   </nav>
@@ -986,6 +1005,50 @@
     </div>
   </section>
 
+  <!-- ══════ VISTA: BOT (PAPER) ══════ -->
+  <section class="view" id="view-bot" hidden>
+    <div class="view-title">Bot de paper trading
+      <span style="font-size:10px;color:var(--yellow);border:1px solid var(--yellow);border-radius:3px;padding:1px 6px;margin-left:8px">PAPER / TESTNET</span>
+    </div>
+    <div class="view-sub">
+      Corre el sistema de agentes en vivo contra <strong>Alpaca paper</strong>
+      (acciones, dinero falso) y <strong>Binance testnet</strong> (cripto, dinero
+      falso). Cada ciclo: analiza los activos, los agentes debaten, y coloca
+      órdenes con stop y take-profit. <strong>No opera con dinero real</strong> —
+      testnet/paper está forzado. Para real, editá el CONFIG de
+      <code>paper_trading_bot_fixed.py</code> y corrélo aparte.
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div id="bot-status">
+        <div class="loading"><div class="spinner"></div> Cargando estado...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">CONFIGURACIÓN</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">
+        Las API keys se guardan en <code>bot_config.json</code> (ignorado por git).
+        Alpaca paper: <a href="https://alpaca.markets" target="_blank" style="color:var(--cyan)">alpaca.markets</a> ·
+        Binance testnet: <a href="https://testnet.binance.vision" target="_blank" style="color:var(--cyan)">testnet.binance.vision</a>
+      </div>
+      <div class="bot-form" id="bot-form">
+        <label>Alpaca API key <input id="bot-alpaca-key" type="text" placeholder="APCA-..."></label>
+        <label>Alpaca secret <input id="bot-alpaca-secret" type="password" placeholder="········"></label>
+        <label>Binance testnet key <input id="bot-binance-key" type="text" placeholder=""></label>
+        <label>Binance testnet secret <input id="bot-binance-secret" type="password" placeholder="········"></label>
+        <label>Acciones (coma) <input id="bot-stocks" type="text"></label>
+        <label>Cripto (coma) <input id="bot-crypto" type="text"></label>
+        <label>Confianza mínima <input id="bot-minconf" type="number" step="0.01" min="0.4" max="0.9"></label>
+        <label>Máx. posición (%) <input id="bot-maxpos" type="number" step="1" min="1" max="50"></label>
+        <label>Stop loss (%) <input id="bot-sl" type="number" step="0.5" min="1" max="20"></label>
+        <label>Take profit (%) <input id="bot-tp" type="number" step="0.5" min="1" max="40"></label>
+        <label>Intervalo (min) <input id="bot-intervalo" type="number" step="5" min="5" max="240"></label>
+      </div>
+      <button class="btn ghost" style="margin-top:12px" onclick="guardarBotConfig()">GUARDAR CONFIG</button>
+    </div>
+  </section>
+
   <!-- ══════ VISTA: HISTORIAL ══════ -->
   <section class="view" id="view-historial" hidden>
     <div class="view-title">Historial de señales</div>
@@ -1016,6 +1079,8 @@ let chartMode = 'precio'
 let portfolioTickers = ['AAPL', 'NVDA', 'BTC-USD', 'ETH-USD']
 let vistaActual = 'resumen'
 let autoRefreshTimer = null
+let botStatusTimer = null
+let botFormLlenado = false
 const vistasCargadas = new Set()
 
 // ── Utilidades ──────────────────────────────────────────────
@@ -1067,6 +1132,13 @@ function mostrarVista(nombre) {
     vistasCargadas.add(nombre)
     if (nombre === 'macro') cargarMacro()
     if (nombre === 'historial') cargarTrades()
+    if (nombre === 'bot') cargarBotStatus(true)
+  }
+  // El estado del bot se refresca cada 15 s mientras la vista está abierta
+  if (botStatusTimer) { clearInterval(botStatusTimer); botStatusTimer = null }
+  if (nombre === 'bot') {
+    cargarBotStatus()
+    botStatusTimer = setInterval(cargarBotStatus, 15000)
   }
   // Chart.js necesita re-medir si se renderizó en un contenedor oculto
   if (nombre === 'resumen' && chartInstance) setTimeout(() => chartInstance.resize(), 30)
@@ -1847,6 +1919,127 @@ async function cargarAgentes() {
     $('agentes-content').innerHTML = `<div class="error-msg">${e.message}</div>`
   }
 }
+
+// ── Bot de paper trading ────────────────────────────────────
+async function cargarBotStatus(llenarForm = false) {
+  try {
+    const r = await fetch(`${API}/bot/status`)
+    const d = await r.json()
+    renderBotStatus(d)
+    if ((llenarForm || !botFormLlenado) && d.config) {
+      const c = d.config
+      $('bot-stocks').value = (c.STOCKS_PAPER || []).join(',')
+      $('bot-crypto').value = (c.CRYPTO_PAPER || []).join(',')
+      $('bot-minconf').value = c.MIN_CONFIANZA
+      $('bot-maxpos').value = Math.round((c.MAX_POSICION_PCT || 0.1) * 100)
+      $('bot-sl').value = (c.STOP_LOSS_PCT || 0.05) * 100
+      $('bot-tp').value = (c.TAKE_PROFIT_PCT || 0.10) * 100
+      $('bot-intervalo').value = c.INTERVALO_MIN || 60
+      botFormLlenado = true
+    }
+  } catch (e) {
+    $('bot-status').innerHTML = `<div class="error-msg">${e.message}</div>`
+  }
+}
+
+function renderBotStatus(d) {
+  const badge = d.running
+    ? `<span class="bot-badge on">● CORRIENDO — ciclo cada ${d.intervalo_min} min</span>`
+    : `<span class="bot-badge off">○ DETENIDO</span>`
+  const ultimo = d.ultimo_ciclo ? new Date(d.ultimo_ciclo).toLocaleString() : '—'
+  const kA = d.keys_ok.alpaca ? 'var(--green)' : 'var(--text2)'
+  const kB = d.keys_ok.binance ? 'var(--green)' : 'var(--text2)'
+
+  let cuentas = ''
+  const a = d.alpaca || {}, b = d.binance || {}
+  if (a.equity || a.cash) {
+    cuentas += `<div>Alpaca: equity <strong>$${fmtNum(parseFloat(a.equity || a.cash))}</strong>${a.buying_power ? ` · buying power $${fmtNum(parseFloat(a.buying_power))}` : ''}</div>`
+  }
+  if (b.balances || (b.assets && b.assets.length)) {
+    const usdt = (b.balances || []).find(x => x.asset === 'USDT')
+    if (usdt) cuentas += `<div>Binance testnet: <strong>${fmtNum(parseFloat(usdt.free))} USDT</strong></div>`
+  }
+
+  let pos = ''
+  for (const p of (d.posiciones || [])) {
+    const pl = parseFloat(p.unrealized_pl || 0)
+    pos += `<tr><td><strong>${p.symbol}</strong></td><td>${p.qty}</td>
+      <td>$${fmtNum(parseFloat(p.current_price || p.avg_entry_price))}</td>
+      <td style="color:${pl >= 0 ? 'var(--green)' : 'var(--red)'}">${pl >= 0 ? '+' : ''}$${fmtNum(pl)}</td></tr>`
+  }
+  const posTabla = pos
+    ? `<table class="var-table" style="max-width:480px;margin-top:8px"><tr><th>Símbolo</th><th>Cant.</th><th>Precio</th><th>P&amp;L no realiz.</th></tr>${pos}</table>`
+    : '<div style="color:var(--text2);font-size:11px;margin-top:6px">Sin posiciones abiertas.</div>'
+
+  let trades = ''
+  for (const t of (d.trades || []).slice().reverse().slice(0, 8)) {
+    const cls = t.accion === 'BUY' ? 'buy' : t.accion === 'SELL' ? 'sell' : 'hold'
+    trades += `<tr><td style="font-size:10px">${new Date(t.timestamp).toLocaleTimeString()}</td>
+      <td><strong>${t.ticker}</strong></td><td><span class="badge ${cls}">${t.accion}</span></td>
+      <td>$${fmtNum(t.precio)}</td><td style="color:var(--text2)">${t.broker}</td></tr>`
+  }
+
+  $('bot-status').innerHTML = `
+    <div class="card-title">ESTADO &nbsp; ${badge}</div>
+    <div style="font-size:11px;color:var(--text2);margin:8px 0 12px">
+      último ciclo: ${ultimo} &nbsp;·&nbsp;
+      keys Alpaca <span style="color:${kA}">${d.keys_ok.alpaca ? 'OK' : 'faltan'}</span> &nbsp;·&nbsp;
+      keys Binance <span style="color:${kB}">${d.keys_ok.binance ? 'OK' : 'faltan'}</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${d.running
+        ? `<button class="btn" style="background:var(--red)" onclick="botStop()">PARAR BOT</button>`
+        : `<button class="btn" onclick="botStart()">ARRANCAR BOT</button>`}
+      <button class="btn ghost" onclick="botCiclo()">CORRER UN CICLO AHORA</button>
+    </div>
+    ${cuentas ? `<div style="font-size:11px;line-height:1.7;margin-bottom:10px">${cuentas}</div>` : ''}
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Posiciones</div>
+    ${posTabla}
+    ${trades ? `
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:14px">Últimos trades</div>
+      <table class="var-table" style="max-width:520px;margin-top:6px">${trades}</table>` : ''}
+    ${(d.log || []).length ? `
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:14px">Log</div>
+      <div style="font-size:10px;color:var(--text2);line-height:1.6;max-height:140px;overflow-y:auto;margin-top:4px">
+        ${d.log.map(l => l.replace(/</g, '&lt;')).join('<br>')}</div>` : ''}`
+}
+
+async function guardarBotConfig() {
+  const config = {
+    STOCKS_PAPER: $('bot-stocks').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean),
+    CRYPTO_PAPER: $('bot-crypto').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean),
+    MIN_CONFIANZA: parseFloat($('bot-minconf').value),
+    MAX_POSICION_PCT: parseFloat($('bot-maxpos').value) / 100,
+    STOP_LOSS_PCT: parseFloat($('bot-sl').value) / 100,
+    TAKE_PROFIT_PCT: parseFloat($('bot-tp').value) / 100,
+    INTERVALO_MIN: parseInt($('bot-intervalo').value, 10),
+  }
+  const set = (k, id) => { const v = $(id).value.trim(); if (v) config[k] = v }
+  set('ALPACA_API_KEY', 'bot-alpaca-key'); set('ALPACA_SECRET_KEY', 'bot-alpaca-secret')
+  set('BINANCE_API_KEY', 'bot-binance-key'); set('BINANCE_SECRET_KEY', 'bot-binance-secret')
+  try {
+    const r = await fetch(`${API}/bot/config`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config })
+    })
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'error') }
+    ;['bot-alpaca-key', 'bot-alpaca-secret', 'bot-binance-key', 'bot-binance-secret'].forEach(id => $(id).value = '')
+    cargarBotStatus()
+    alert('Configuración guardada.')
+  } catch (e) { alert('No se pudo guardar: ' + e.message) }
+}
+
+async function botAccion(ep, txt) {
+  try {
+    const r = await fetch(`${API}/bot/${ep}`, { method: 'POST' })
+    const d = await r.json()
+    if (!r.ok) throw new Error(d.detail || 'error')
+    cargarBotStatus()
+  } catch (e) { alert(`${txt}: ${e.message}`) }
+}
+const botStart = () => botAccion('start', 'Arrancar')
+const botStop = () => botAccion('stop', 'Parar')
+const botCiclo = () => { if (confirm('Correr un ciclo ahora (puede colocar órdenes)?')) botAccion('ciclo', 'Ciclo') }
 
 // ── Trades ───────────────────────────────────────────────────
 async function cargarTrades() {

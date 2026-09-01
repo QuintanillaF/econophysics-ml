@@ -46,7 +46,7 @@ indicadores de econofísica. Sobre esa base:
         └─► qft_analysis.py    pozo de potencial cuántico de los retornos (experimental)
 
   ML + agentes ──► señales ──► paper_trading_bot (Alpaca + Binance testnet)
-  todo ──────────► server.py (FastAPI) + static/index.html (dashboard, 9 vistas)
+  todo ──────────► server.py (FastAPI) + static/index.html (dashboard, 10 vistas)
 ```
 
 La idea de fondo: **los mercados no son gaussianos ni eficientes**. Tienen memoria
@@ -564,8 +564,8 @@ python server.py
 # → http://localhost:8000/docs   API interactiva (Swagger)
 ```
 
-**Menú lateral con 9 vistas:** Resumen · Riesgo (VaR) · Stress testing ·
-Burbujas (LPPLS) · Macro · Agentes · Portfolio · QFT (experimental) · Historial.
+**Menú lateral con 10 vistas:** Resumen · Riesgo (VaR) · Stress testing ·
+Burbujas (LPPLS) · Macro · Agentes · Portfolio · QFT (experimental) · Bot (paper) · Historial.
 Cada vista carga sus datos la primera vez que se abre. Arriba de todo, en todas
 las vistas, una **barra de señales** con la watchlist completa (20 acciones +
 20 criptos) que se recorre en paralelo y se precalienta al arrancar el server.
@@ -587,6 +587,7 @@ glosario en los paneles.
 | `GET /api/señales` | señales rápidas; sin parámetros usa la watchlist de 40 |
 | `GET /api/macro` | sentimiento cripto: Fear & Greed, dominancia BTC, top-10 |
 | `GET /api/entrenar/{ticker}` | entrena el modelo ML en background |
+| `/api/bot/status` · `start` · `stop` · `ciclo` · `config` | control del bot de paper trading desde el dashboard |
 
 > Nota: `/api/analizar` devuelve un `var_95_diario` simple (percentil 5). La
 > versión rigurosa —con backtest y tests supervisores— es `varengine/` vía
@@ -645,6 +646,17 @@ python qft_analysis.py BTC-USD
   bracket order, cooldown entre trades del mismo activo, stop global.
 - Kill switch que **solo cuenta trades ejecutados** (no análisis).
 - Registro de trades en `trades_log.json` (lo lee el dashboard).
+
+Se puede correr de dos formas:
+
+**Desde el dashboard** (vista *Bot (paper)*): cargás las API keys de Alpaca paper
+y Binance testnet en el formulario (se guardan en `bot_config.json`, ignorado por
+git), y arrancás / parás el bot desde ahí. La vista muestra estado, posiciones,
+últimos trades y un log. `testnet/paper está forzado` — para real hay que editar
+el `CONFIG` del script. Endpoints: `GET /api/bot/status`, `POST /api/bot/config`,
+`POST /api/bot/start` / `stop` / `ciclo`.
+
+**Como proceso aparte** (recomendado para dejarlo corriendo):
 
 ```bash
 # 1. Pegar las API keys en el dict CONFIG del archivo
@@ -715,7 +727,7 @@ pip install -r requirements.txt
 | …con datos reales + stress testing (acciones AR) | `python var_analysis.py --real` |
 | Régimen macro / cross-asset | `python analisis_macro.py` |
 | Pozo de potencial cuántico (experimental) | `python qft_analysis.py BTC-USD` |
-| Levantar el dashboard (9 vistas) | `python server.py` → http://localhost:8000 |
+| Levantar el dashboard (10 vistas) | `python server.py` → http://localhost:8000 |
 | Backtest ML de un activo | `python bot_trading_ml_econofisica.py` |
 | Análisis econofísico corto plazo | `python econofisica_sistema.py` |
 | Análisis largo plazo (burbujas, RMT) | `python econofisica_mediano_largo_plazo.py` |

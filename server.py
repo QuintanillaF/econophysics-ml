@@ -753,6 +753,179 @@ async def get_trades():
 
 
 # ══════════════════════════════════════════════════════════════
+# BOT DE PAPER TRADING (control desde el dashboard)
+# ══════════════════════════════════════════════════════════════
+import threading
+
+_BOT_CONFIG_FILE = Path("bot_config.json")
+_bot = {
+    "running": False, "thread": None, "stop": threading.Event(),
+    "obj": None, "ultimo_ciclo": None, "intervalo_min": 60, "log": [],
+}
+
+
+def _bot_config_default() -> dict:
+    """CONFIG del bot con las keys en blanco (paper / testnet forzados)."""
+    return {
+        "ALPACA_API_KEY": "", "ALPACA_SECRET_KEY": "",
+        "ALPACA_BASE_URL": "https://paper-api.alpaca.markets",
+        "BINANCE_API_KEY": "", "BINANCE_SECRET_KEY": "", "BINANCE_TESTNET": True,
+        "CAPITAL_PAPER": 15000, "CAPITAL_BINANCE": 50,
+        "MAX_POSICION_PCT": 0.10, "STOP_LOSS_PCT": 0.05, "TAKE_PROFIT_PCT": 0.10,
+        "MIN_CONFIANZA": 0.55, "COOLDOWN_HORAS": 4,
+        "STOCKS_PAPER": ["AAPL", "NVDA", "TSLA", "SPY", "MSFT", "AMZN", "GOOGL", "META", "AMD", "PLTR"],
+        "CRYPTO_PAPER": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
+                         "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT"],
+        "LOG_FILE": "paper_trading.log", "TRADES_FILE": "trades_log.json",
+        "INTERVALO_MIN": 60,
+    }
+
+
+def _bot_config_cargar() -> dict:
+    cfg = _bot_config_default()
+    if _BOT_CONFIG_FILE.exists():
+        try:
+            cfg.update(json.loads(_BOT_CONFIG_FILE.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+    # nunca dejar que el dashboard apunte a real
+    cfg["BINANCE_TESTNET"] = True
+    cfg["ALPACA_BASE_URL"] = "https://paper-api.alpaca.markets"
+    return cfg
+
+
+def _bot_config_sin_secrets(cfg: dict) -> dict:
+    out = dict(cfg)
+    for k in ("ALPACA_API_KEY", "ALPACA_SECRET_KEY", "BINANCE_API_KEY", "BINANCE_SECRET_KEY"):
+        out[k] = "········" + cfg.get(k, "")[-4:] if cfg.get(k) else ""
+    return out
+
+
+def _bot_log(msg: str):
+    _bot["log"].append(f"{datetime.now():%H:%M:%S}  {msg}")
+    _bot["log"] = _bot["log"][-40:]
+
+
+def _bot_loop(bot, stop_event: threading.Event, intervalo_min: int):
+    _bot_log(f"bot arrancado, ciclo cada {intervalo_min} min")
+    while not stop_event.is_set():
+        try:
+            bot.ciclo_completo()
+            _bot["ultimo_ciclo"] = datetime.now().isoformat()
+            _bot_log("ciclo completado")
+        except Exception as e:  # el ciclo nunca debe matar el hilo
+            _bot_log(f"ERROR en ciclo: {e}")
+        stop_event.wait(intervalo_min * 60)
+    _bot_log("bot detenido")
+
+
+class BotConfigRequest(BaseModel):
+    config: dict
+
+
+@app.get("/api/bot/status")
+def bot_status():
+    cfg = _bot_config_cargar()
+    estado = {
+        "running": _bot["running"],
+        "ultimo_ciclo": _bot["ultimo_ciclo"],
+        "intervalo_min": _bot["intervalo_min"],
+        "config": _bot_config_sin_secrets(cfg),
+        "keys_ok": {
+            "alpaca": bool(cfg["ALPACA_API_KEY"] and cfg["ALPACA_SECRET_KEY"]),
+            "binance": bool(cfg["BINANCE_API_KEY"] and cfg["BINANCE_SECRET_KEY"]),
+        },
+        "log": _bot["log"][-15:],
+        "alpaca": {}, "binance": {}, "posiciones": [],
+    }
+    bot = _bot["obj"]
+    if bot is not None:
+        try:
+            estado["alpaca"] = bot.alpaca.get_cuenta() or {}
+            estado["posiciones"] = bot.alpaca.get_posiciones() or []
+        except Exception:
+            pass
+        try:
+            estado["binance"] = bot.binance.get_cuenta() or {}
+        except Exception:
+            pass
+    p = Path("trades_log.json")
+    estado["trades"] = json.loads(p.read_text())[-15:] if p.exists() else []
+    return estado
+
+
+@app.post("/api/bot/config")
+def bot_config_guardar(req: BotConfigRequest):
+    cfg = _bot_config_cargar()
+    # solo campos conocidos; ignorar keys enmascaradas (empiezan con ·)
+    for k, v in req.config.items():
+        if k not in _bot_config_default():
+            continue
+        if isinstance(v, str) and v.startswith("·"):
+            continue
+        cfg[k] = v
+    cfg["BINANCE_TESTNET"] = True
+    cfg["ALPACA_BASE_URL"] = "https://paper-api.alpaca.markets"
+    _BOT_CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"status": "guardado", "config": _bot_config_sin_secrets(cfg)}
+
+
+@app.post("/api/bot/start")
+def bot_start():
+    if _bot["running"]:
+        return {"status": "ya estaba corriendo"}
+    cfg = _bot_config_cargar()
+    if not (cfg["ALPACA_API_KEY"] or cfg["BINANCE_API_KEY"]):
+        raise HTTPException(400, "Cargá al menos las API keys de Alpaca o de Binance testnet primero")
+
+    from paper_trading_bot_fixed import PaperTradingBot
+
+    try:
+        bot = PaperTradingBot(cfg)
+        bot._init_agentes()
+    except Exception as e:
+        raise HTTPException(500, f"No se pudo crear el bot: {e}")
+
+    _bot["obj"] = bot
+    _bot["intervalo_min"] = int(cfg.get("INTERVALO_MIN", 60))
+    _bot["stop"] = threading.Event()
+    _bot["thread"] = threading.Thread(
+        target=_bot_loop, args=(bot, _bot["stop"], _bot["intervalo_min"]), daemon=True
+    )
+    _bot["running"] = True
+    _bot["thread"].start()
+    return {"status": "arrancado", "intervalo_min": _bot["intervalo_min"]}
+
+
+@app.post("/api/bot/stop")
+def bot_stop():
+    if not _bot["running"]:
+        return {"status": "no estaba corriendo"}
+    _bot["stop"].set()
+    _bot["running"] = False
+    return {"status": "detenido"}
+
+
+@app.post("/api/bot/ciclo")
+def bot_ciclo_manual():
+    """Corre un ciclo ahora mismo (sin arrancar el loop)."""
+    cfg = _bot_config_cargar()
+    if not (cfg["ALPACA_API_KEY"] or cfg["BINANCE_API_KEY"]):
+        raise HTTPException(400, "Cargá las API keys primero")
+    from paper_trading_bot_fixed import PaperTradingBot
+    try:
+        bot = _bot["obj"]
+        if bot is None:
+            bot = PaperTradingBot(cfg); bot._init_agentes(); _bot["obj"] = bot
+        bot.ciclo_completo()
+        _bot["ultimo_ciclo"] = datetime.now().isoformat()
+        _bot_log("ciclo manual completado")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"status": "ciclo ejecutado"}
+
+
+# ══════════════════════════════════════════════════════════════
 # ARRANCAR
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":

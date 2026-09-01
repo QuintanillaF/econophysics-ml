@@ -34,3 +34,4 @@ Thumbs.db
 # ── Claves de API (nunca commitear) ────────────────────────
 .env
 secrets.json
+bot_config.json
