@@ -581,8 +581,7 @@ glosario en los paneles.
 
 ### QFT (experimental / en desarrollo)
 
-`qft_analysis.py` — **exploratorio, no es un modelo de riesgo validado ni se usa
-en un banco.** Está separado del resto a propósito. Trata al retorno como una
+`qft_analysis.py` — **exploratorio, no es un modelo de riesgo validado** Está separado del resto a propósito. Trata al retorno como una
 partícula cuántica en un pozo de potencial.
 
 **Pozo estático.** Si la densidad de retornos `rho(x)` es el estado fundamental
